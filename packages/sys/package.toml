@@ -27,8 +27,11 @@ params = [{ name = "pattern", type = "str", positional = true, required = true, 
 returns = "table of {pid, command}"
 examples = ["sys.procs \"vite|next dev\"", "sys.procs \"postgres\""]
 run = '''
+let e = (env)
+let flags = "-lf"
+if $e.os =~ "^linux" { let flags = "-af" }
 let rows = []
-for $l in (exec "pgrep" "-lf" $pattern ok:[0, 1] parse:"lines") {
+for $l in (exec "pgrep" $flags $pattern ok:[0, 1] parse:"lines") {
   let m = match($l, "^(\\d+) (.*)$")
   if $m != null and not ($m[2] =~ "sys\\.procs") { let rows = $rows + [{pid: int($m[1]), command: $m[2]}] }
 }
