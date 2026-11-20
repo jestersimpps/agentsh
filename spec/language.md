@@ -74,6 +74,17 @@ Every call prints exactly one envelope (JSON by default, or the same content as 
 
 ## Shortening
 
+### What the agent has already seen
+
+In a named session (anything but `default`), agentsh keeps a record for each file: the version the agent last saw, which of its lines the agent knows, and every line it has seen in any version. Reads, the agent's own edits and `unseen` (used by `git.diff`) update the record. Lines count as seen only once output containing them is shown, not when a value is only passed along a pipe. When a file changes, known lines carry over to the new version through a line diff.
+
+- `read`: runs of 4 or more known lines become `[lines A–B: already shown, unchanged]`. A fully known range becomes one note. If lines the agent knew have changed since, the output starts with `[changed since you last saw it: lines …; N lines removed after line M]`. Lines the agent wrote through `edit`, `write` or `replace` count as known. The value itself (`$_`, pipes) is always the real text. `full:true` shows everything.
+- A whole-file `read` of a file over 400 lines shows its outline and how to get the rest (`symbol:`, `from:`/`to:`, `full:true`). The value is the whole file.
+- `unseen`: given a git diff whose new side is the work tree, it leaves out hunks whose added lines the agent knows at those positions and whose removed lines it has seen. These are listed at the end. A file another process changed since the agent last saw it is always shown in full. With `worktree:false` (staged diffs, `a..b`), added lines are matched by content.
+- `exec` and `check`: when a program changes a file the agent was up to date on, the result warns ``"`cmd` changed a file you've read: …"``.
+- `check`: a failure with the same failing tests as the previous run of the same command names them, without the messages.
+- `forget [paths]` clears the record, for example after the agent's context was compacted.
+
 Lists longer than `max_items` (default 50) are cut. Text longer than `max_string_bytes` (default 24,000) is excerpted: repeated lines collapse, the head and tail are kept, and lines in the middle that mention errors, failures, panics, exceptions or warnings are kept with their line numbers. A list shares the text budget between its items.
 
 ## Capabilities

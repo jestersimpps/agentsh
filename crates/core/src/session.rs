@@ -30,6 +30,12 @@ pub struct SessionState {
     pub shown: HashMap<PathBuf, String>,
     #[serde(default)]
     pub last_outputs: HashMap<String, String>,
+    /// What the agent has seen of each file (see `seen`).
+    #[serde(default)]
+    pub views: HashMap<PathBuf, crate::seen::View>,
+    /// Per check command: a hash of the failures it reported last.
+    #[serde(default)]
+    pub checks: HashMap<String, String>,
     #[serde(default)]
     pub hints_seen: Vec<String>,
     pub run_counter: u64,
@@ -56,6 +62,21 @@ impl SessionState {
         self.hints_seen.push(key);
         if self.hints_seen.len() > MAX_HINTS {
             self.hints_seen.remove(0);
+        }
+    }
+
+    /// Forget what the agent has seen (all of it, or these paths), e.g. after its context was
+    /// compacted, so everything is shown in full again.
+    pub fn forget(&mut self, paths: &[PathBuf]) {
+        if paths.is_empty() {
+            self.views.clear();
+            self.shown.clear();
+            self.last_outputs.clear();
+            self.hints_seen.clear();
+            self.checks.clear();
+        } else {
+            self.views.retain(|p, _| !paths.iter().any(|f| p.starts_with(f)));
+            self.shown.retain(|p, _| !paths.iter().any(|f| p.starts_with(f)));
         }
     }
 

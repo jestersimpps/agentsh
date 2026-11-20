@@ -1,6 +1,9 @@
 use agentsh_spec::{Effect, EffectOp, Envelope, Value};
 
-const MAX_CELL: usize = 120;
+/// Longest single-line cell a table shows inline; a longer or multi-line value switches the table to
+/// one block per row. Source lines over 120 characters are common (JSX, URLs), and one of them
+/// shouldn't turn a 300-row grep into labelled blocks.
+const MAX_CELL: usize = 400;
 
 pub fn render_text(envelope: &Envelope) -> String {
     let mut out = String::new();

@@ -114,5 +114,23 @@
         }
       }
     ]
+  },
+  {
+    "name": "check args: are split like a shell line and passed to the npm script after --",
+    "allow": [
+      "exec"
+    ],
+    "files": {
+      "package.json": "{\"scripts\": {\"test\": \"node args.js\"}}",
+      "args.js": "const a = process.argv.slice(2); if (a.join(',') !== '--run,a.test.ts,b c.test.ts') { console.error('got ' + a.join(',')); process.exit(1) }\n"
+    },
+    "steps": [
+      {
+        "run": "check args:\"--run a.test.ts 'b c.test.ts'\"",
+        "expect": {
+          "value.command": "npm run test -- --run a.test.ts b c.test.ts"
+        }
+      }
+    ]
   }
 ]

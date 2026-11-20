@@ -1,4 +1,5 @@
 use crate::util::{check_expect, file_row, read_text};
+use agentsh_core::ReadRecord;
 use agentsh_core::{
     Args, Builtin, CommandSpec, Ctx, ParamSpec as P, ParamType as T, Result, ShellError, WalkOptions, walk,
 };
@@ -119,43 +120,95 @@ fn read_one(ctx: &mut Ctx, raw: &str, range: &LineRange, budget: usize) -> Resul
     }
     let text = read_text(ctx, &path)?;
     ctx.mark_seen(&path);
+    let file_hash = agentsh_platform::hash_bytes(text.as_bytes());
     if range.is_whole() {
-        if text.len() <= budget {
-            ctx.note_read(&path, &text, range.full);
-        }
-        if text.len() > budget {
-            let lines = text.lines().count();
+        let total = text.lines().count();
+        let outline = (!range.full && total > OUTLINE_OVER_LINES).then(|| outline_instead(raw, &text, total)).flatten();
+        let record = |hash: String, outline: Option<String>| ReadRecord {
+            path: path.clone(),
+            hash,
+            file_hash: file_hash.clone(),
+            start: 0,
+            end: total,
+            whole: true,
+            numbers: false,
+            full: range.full,
+            outline,
+            display: None,
+            known: Vec::new(),
+        };
+        if outline.is_some() {
+            ctx.note_read(record(file_hash.clone(), outline), &text);
+        } else if text.len() <= budget {
+            ctx.note_read(record(file_hash.clone(), None), &text);
+        } else {
             ctx.warn(format!(
-                "`{raw}` has {lines} lines and is shown shortened; read a range with from:/to: (numbers:true helps)"
+                "`{raw}` has {total} lines and is shown shortened; read a range with from:/to: (numbers:true helps)"
             ));
         }
         return Ok(text);
     }
-    slice_text(raw, &text, range)
+    let (start, end) = slice_bounds(raw, &text, range)?;
+    let out = slice_text(&text, start, end, range.numbers);
+    if out.len() <= budget {
+        let record = ReadRecord {
+            path: path.clone(),
+            hash: agentsh_platform::hash_bytes(out.as_bytes()),
+            file_hash,
+            start,
+            end,
+            whole: false,
+            numbers: range.numbers,
+            full: range.full,
+            outline: None,
+            display: None,
+            known: Vec::new(),
+        };
+        ctx.note_read(record, &text);
+    }
+    Ok(out)
 }
 
-/// The lines `range` selects from `text` (from/to, tail, or one symbol); `label` names the source in errors.
-fn slice_text(label: &str, text: &str, range: &LineRange) -> Result<String> {
-    let LineRange { from, to, tail, numbers, .. } = range.clone();
-    let raw = label;
-    let lines: Vec<&str> = text.lines().collect();
-    let total = lines.len();
-    let (start, end) = match (&range.symbol, tail) {
+/// Whole-file reads of longer files show the outline instead (the value itself is the whole file).
+const OUTLINE_OVER_LINES: usize = 400;
+
+fn outline_instead(raw: &str, text: &str, total: usize) -> Option<String> {
+    let rows = crate::code::outline_rows(text, None);
+    if rows.len() < 3 {
+        return None;
+    }
+    let listed: Vec<String> =
+        rows.iter().map(|(line, depth, decl)| format!("{line}\t{}{decl}", "  ".repeat(*depth))).collect();
+    Some(format!(
+        "[`{raw}` has {total} lines, so here is its outline. read \"{raw}\" symbol:\"name\" shows one declaration, from:/to: a range, full:true the whole file]\n{}\n",
+        listed.join("\n")
+    ))
+}
+
+fn slice_bounds(label: &str, text: &str, range: &LineRange) -> Result<(usize, usize)> {
+    let total = text.lines().count();
+    let (start, end) = match (&range.symbol, range.tail) {
         (Some(name), _) => {
             let (s, e) =
-                crate::code::symbol_range(text, name).ok_or_else(|| crate::code::missing_symbol(raw, name, text))?;
+                crate::code::symbol_range(text, name).ok_or_else(|| crate::code::missing_symbol(label, name, text))?;
             (s, e + 1)
         }
         (None, Some(n)) => (total.saturating_sub(n), total),
-        (None, None) => (from.unwrap_or(1).max(1) - 1, to.unwrap_or(total).min(total)),
+        (None, None) => (range.from.unwrap_or(1).max(1) - 1, range.to.unwrap_or(total).min(total)),
     };
     if start >= end && total > 0 {
         return Err(ShellError::new(
             ErrorCode::InvalidValue,
-            format!("line range is empty; `{raw}` has {total} lines"),
+            format!("line range is empty; `{label}` has {total} lines"),
         ));
     }
-    let selected: Vec<String> = lines[start.min(total)..end]
+    Ok((start, end))
+}
+
+fn slice_text(text: &str, start: usize, end: usize, numbers: bool) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let total = lines.len();
+    let selected: Vec<String> = lines[start.min(total)..end.min(total)]
         .iter()
         .enumerate()
         .map(|(i, line)| if numbers { format!("{}\t{line}", start + i + 1) } else { line.to_string() })
@@ -164,7 +217,7 @@ fn slice_text(label: &str, text: &str, range: &LineRange) -> Result<String> {
     if end < total || text.ends_with('\n') {
         out.push('\n');
     }
-    Ok(out)
+    out
 }
 
 pub const EXCERPT: Builtin = Builtin {
@@ -203,7 +256,8 @@ fn excerpt(_ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
     if range.is_whole() {
         return Ok(Value::Str(text));
     }
-    slice_text("the text", &text, &range).map(Value::Str)
+    let (start, end) = slice_bounds("the text", &text, &range)?;
+    Ok(Value::Str(slice_text(&text, start, end, range.numbers)))
 }
 
 pub const WRITE: Builtin = Builtin {

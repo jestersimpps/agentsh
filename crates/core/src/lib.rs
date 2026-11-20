@@ -8,6 +8,7 @@ mod limits;
 pub mod package;
 mod redact;
 mod registry;
+pub mod seen;
 mod session;
 mod shell;
 mod suggest;
@@ -16,7 +17,7 @@ mod trace;
 mod walk;
 
 pub use args::{ArgVal, Args};
-pub use ctx::Ctx;
+pub use ctx::{Ctx, ReadRecord};
 pub use error::{Result, ShellError};
 pub use functions::FUNCTIONS;
 pub use interp::{coerce, find_on_path};
