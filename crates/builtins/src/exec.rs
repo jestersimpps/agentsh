@@ -71,6 +71,7 @@ pub fn run_captured(ctx: &mut Ctx, spec: RunSpec) -> Result<Captured> {
     let policy = ctx.sandbox_policy();
     ctx.exec_used = true;
     let program_str = program_path.to_string_lossy().into_owned();
+    let before = ctx.views_snapshot();
     let out = run_exec(
         ctx.sandbox,
         ExecRequest {
@@ -85,6 +86,8 @@ pub fn run_captured(ctx: &mut Ctx, spec: RunSpec) -> Result<Captured> {
         },
     )
     .map_err(|e| launch_error(ctx, program, &e))?;
+    let label: String = spec.argv.join(" ").chars().take(60).collect();
+    ctx.report_changed(before, &label);
     let stdout = strip_ansi(&String::from_utf8_lossy(&out.stdout));
     let stderr = strip_ansi(&String::from_utf8_lossy(&out.stderr));
     if out.stdout_total > out.stdout.len() as u64 || out.stderr_total > out.stderr.len() as u64 {
@@ -183,7 +186,7 @@ pub fn split_single_command(argv: Vec<String>) -> Result<Vec<String>> {
     }
 }
 
-fn shell_words(line: &str) -> Result<Vec<String>> {
+pub(crate) fn shell_words(line: &str) -> Result<Vec<String>> {
     let mut words = Vec::new();
     let mut current = String::new();
     let mut in_word = false;

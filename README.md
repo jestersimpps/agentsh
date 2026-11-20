@@ -42,7 +42,7 @@ src/parser.rs	19677
 
 Tool execution time is only the time the commands themselves run; it excludes the model's thinking between calls, which dominates real sessions. For overall time, the session simulation below is the better guide: fewer turns matter far more than faster tools.
 
-Where the savings come from: fewer round trips (pipelines, several statements per call, `grep ... after:N`, edit-and-test in one run, read-only typo correction), reading only what's needed (`read … symbol:`, `outline`, `refs`, `map`), not re-sending what the agent already has (unchanged files become a one-line note, changed files a diff, repeated results a note), and compact output (tab tables, relative times, constant columns printed once, failure digests, short edit confirmations).
+Where the savings come from: fewer round trips (pipelines, several statements per call, `grep ... after:N`, edit-and-test in one run, read-only typo correction), reading only what's needed (`read … symbol:`, `outline`, `refs`, `map`), not re-sending what the agent already has (lines and diff hunks it has seen or written are left out, repeated results become a note), and compact output (tab tables, relative times, constant columns printed once, failure digests, short edit confirmations).
 
 ### Packages
 
@@ -79,7 +79,7 @@ cargo install --path crates/cli
 Give the agent a cheat sheet and the binary:
 
 ```sh
-agentsh help            # full cheat sheet, ~1,180 tokens
+agentsh help            # full cheat sheet, ~1,270 tokens
 agentsh help brief      # syntax + the everyday commands, ~540 tokens
 agentsh help edit       # one command in detail
 agentsh help js         # one package's briefing
@@ -103,7 +103,16 @@ Every top-level statement's result is shown, so independent questions fit in one
 
 Output is compact text by default (raw file contents, tables with one header row, `error <code>:` lines with hints). `--format json` (or `AGENTSH_FORMAT=json`) prints the full JSON envelope for programs.
 
-Session commands: `agentsh undo [u_N]`, `changes`, `commit`, `discard`, `checkpoint NAME`, `rollback NAME`. Sessions (`--session ID`) keep the current folder, variables, result handles and the undo journal between calls. Give each agent conversation its own session id: in a named session, re-reading an unchanged file returns a one-line note, re-reading a changed file returns a diff against the version the agent saw, an identical repeated result returns a note (the value stays in `$_`), and generic hints are shown once.
+Session commands: `agentsh undo [u_N]`, `changes`, `commit`, `discard`, `checkpoint NAME`, `rollback NAME`. Sessions (`--session ID`) keep the current folder, variables, result handles and the undo journal between calls. Give each agent conversation its own session id. A named session remembers which lines of each file the agent has seen, from reads, its own edits and diffs, and leaves them out of later output:
+
+- A re-read shows only lines that are new to the agent (`[lines 21–75: already shown, unchanged]`).
+- A file the agent wrote itself isn't shown back to it.
+- `git.diff` leaves out hunks the agent wrote or already saw, and lists them in one line.
+- When a program changes a file the agent has read, the call says so, and the next read shows only what changed.
+- A test run with the same failures as last time names them without repeating the messages.
+- An identical repeated result becomes a note (the value stays in `$_`), and generic hints are shown once.
+
+`full:true` shows everything again. After the harness compacts the agent's context, run `forget` (for example from a pre-compact hook: `agentsh -s ID run forget`) so nothing is assumed to still be in context. Agents get the most out of this in their own worktree, where only they change the files. A whole-file read of a file over 400 lines shows its outline instead; `symbol:`, `from:`/`to:` or `full:true` get the rest. On a replayed real session this cut what the agent read by 32% without shortening anything ([bench/replay_results.md](bench/replay_results.md)).
 
 ## Packages
 

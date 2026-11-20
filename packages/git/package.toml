@@ -45,8 +45,9 @@ params = [
   { name = "rev", type = "str", doc = "compare with this revision, e.g. main or HEAD~3; a..b and a...b work too" },
   { name = "staged", type = "bool", doc = "only staged changes" },
   { name = "stat", type = "bool", doc = "table of {path, added, removed} instead of the patch" },
+  { name = "full", type = "bool", doc = "include hunks you've already seen (your own edits, earlier diffs)" },
 ]
-returns = "patch text, or table with stat:true"
+returns = "patch text without the hunks you've already seen (listed at the end), or table with stat:true"
 examples = ["git.diff", "git.diff \"src/a.rs\" rev:\"main\"", "git.diff stat:true rev:\"main...HEAD\""]
 run = '''
 let argv = ["git", "diff", "--no-color", "--no-ext-diff"]
@@ -62,7 +63,9 @@ if $out == "" { "no changes" } else {
       let m = match($l, "^(\S+)\t(\S+)\t(.*)$")
       {path: $m[3], added: $m[1], removed: $m[2]}
     }
-  } else { $out }
+  } else {
+    if $full { $out } else { unseen $out worktree:($staged != true and ($rev == null or not ($rev =~ "\\.\\."))) }
+  }
 }
 '''
 

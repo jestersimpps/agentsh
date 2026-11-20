@@ -1,5 +1,6 @@
 mod check;
 mod code;
+mod context;
 mod data;
 mod env;
 mod exec;
@@ -54,6 +55,8 @@ pub fn registry() -> Registry {
         data::JSON,
         data::PRINT,
         data::FAIL,
+        context::UNSEEN,
+        context::FORGET,
         exec::EXEC,
         check::CHECK,
         jobs::START,

@@ -39,15 +39,29 @@ pub struct Ctx<'a> {
     pub script_depth: usize,
 }
 
+/// One read this run made, so its output can be checked against what the agent has seen.
+#[derive(Clone)]
 pub struct ReadRecord {
     pub path: PathBuf,
+    /// Hash of the text the read returned.
     pub hash: String,
+    /// Hash of the whole file it came from (its text is saved in the shown store).
+    pub file_hash: String,
+    /// The 0-based line range the read returned.
+    pub start: usize,
+    pub end: usize,
+    pub whole: bool,
+    pub numbers: bool,
     pub full: bool,
+    /// For a large whole-file read: an outline to show instead.
+    pub outline: Option<String>,
+    /// What to show instead of the text (worked out by `note_read`), if anything is left out.
+    pub display: Option<String>,
+    /// The file's lines the agent knows once this read is shown.
+    pub known: Vec<bool>,
 }
 
 const UNCHANGED_NOTE: &str = "[unchanged since you last read it in this session; pass full:true to see it again]";
-const CHANGED_NOTE: &str =
-    "[changed since you last read it; diff against that version below; pass full:true for the whole file]";
 const REPEAT_NOTE: &str = "[same result as the last time you ran this in this session; the full value is in $_]";
 const MIN_REPEAT_BYTES: usize = 300;
 const MAX_SHOWN_BYTES: usize = 1024 * 1024;
@@ -221,6 +235,11 @@ impl<'a> Ctx<'a> {
 
     pub fn write_file(&mut self, path: &Path, bytes: &[u8], append: bool) -> Result<EffectOp> {
         let shown = self.display(path);
+        let old = if self.dedupes() {
+            std::fs::read(path).ok().filter(|b| b.len() <= MAX_SHOWN_BYTES).and_then(|b| String::from_utf8(b).ok())
+        } else {
+            None
+        };
         let op = if append {
             self.journal.append_file(self.run_id, path, bytes)
         } else {
@@ -228,6 +247,13 @@ impl<'a> Ctx<'a> {
         }
         .map_err(|e| ShellError::io(&e, &shown))?;
         self.mark_seen(path);
+        if self.dedupes()
+            && let Ok(written) = std::str::from_utf8(bytes)
+        {
+            let old = old.unwrap_or_default();
+            let new = if append { format!("{old}{written}") } else { written.to_string() };
+            self.note_own_write(path, &old, &new);
+        }
         let size = std::fs::metadata(path).map(|m| m.len()).ok();
         match self.effects.iter_mut().find(|e| e.path == shown && matches!(e.op, EffectOp::Create | EffectOp::Modify)) {
             Some(existing) => existing.bytes = size,
@@ -240,6 +266,7 @@ impl<'a> Ctx<'a> {
         let shown = self.display(path);
         self.journal.remove(self.run_id, path).map_err(|e| ShellError::io(&e, &shown))?;
         self.state.seen.retain(|p, _| !p.starts_with(path));
+        self.state.views.retain(|p, _| !p.starts_with(path));
         self.effects.push(Effect { op: EffectOp::Delete, path: shown, to: None, bytes: None });
         Ok(())
     }
@@ -248,6 +275,7 @@ impl<'a> Ctx<'a> {
         let (shown_from, shown_to) = (self.display(from), self.display(to));
         self.journal.rename(self.run_id, from, to).map_err(|e| ShellError::io(&e, &shown_from))?;
         self.state.seen.retain(|p, _| !p.starts_with(from));
+        self.state.views.retain(|p, _| !p.starts_with(from));
         self.effects.push(Effect { op: EffectOp::Move, path: shown_from, to: Some(shown_to), bytes: None });
         Ok(())
     }
@@ -277,27 +305,67 @@ impl<'a> Ctx<'a> {
         Ok(created)
     }
 
-    pub fn note_read(&mut self, path: &Path, text: &str, full: bool) {
-        self.read_log.push(ReadRecord {
-            path: path.to_path_buf(),
-            hash: agentsh_platform::hash_bytes(text.as_bytes()),
-            full,
-        });
+    /// Record a read. What it shows the agent is worked out now, in the order statements run
+    /// (an edit later in the same program mustn't change it); the session only counts it as
+    /// seen once the output is actually shown (see `dedupe_text`).
+    pub fn note_read(&mut self, mut record: ReadRecord, file_text: &str) {
+        if record.outline.is_none() && self.dedupes() {
+            self.save_shown(&record.file_hash, file_text);
+            let lines: Vec<&str> = file_text.lines().collect();
+            let (mut known, changes) = self.carried_view(&record.path, file_text);
+            for earlier in self.read_log.iter().filter(|r| r.path == record.path && r.file_hash == record.file_hash) {
+                for (k, e) in known.iter_mut().zip(&earlier.known) {
+                    *k |= *e;
+                }
+            }
+            let (start, end) = (record.start.min(lines.len()), record.end.min(lines.len()));
+            if !record.full {
+                let note = changes_note(&changes, start, end);
+                let body = if end > start && known[start..end].iter().all(|k| *k) {
+                    Some(if record.whole {
+                        UNCHANGED_NOTE.to_string()
+                    } else {
+                        let shown = self.display(&record.path);
+                        format!(
+                            "[lines {}–{end} of `{shown}`: already shown, unchanged; full:true shows them again]",
+                            start + 1
+                        )
+                    })
+                } else {
+                    crate::seen::elide(&lines, start, end, &known, record.numbers)
+                };
+                record.display = match (body, note) {
+                    (Some(body), Some(note)) => Some(format!("{note}\n{body}")),
+                    (Some(body), None) => Some(body),
+                    (None, Some(note)) => Some(format!("{note}\n{}", slice_lines(&lines, start, end, record.numbers))),
+                    (None, None) => None,
+                };
+            }
+            for k in known.iter_mut().take(end).skip(start) {
+                *k = true;
+            }
+            record.known = known;
+        }
+        self.read_log.push(record);
+    }
+
+    /// Whether this session leaves out what the agent has already seen (not the shared default one).
+    pub fn dedupes(&self) -> bool {
+        self.session_id != "default"
     }
 
     pub fn dedupe_reads(&mut self, value: &mut Value) {
         if self.read_log.is_empty() {
             return;
         }
-        let dedupe = self.session_id != "default";
         match value {
-            Value::Str(text) => self.dedupe_text(text, dedupe),
+            Value::Str(text) => self.dedupe_text(text),
             Value::List(items) => {
                 for item in items {
                     if let Value::Record(record) = item
                         && let Some(Value::Str(content)) = record.get_mut("content")
                     {
-                        self.dedupe_text(content, dedupe);
+                        self.dedupe_text(content);
                     }
                 }
             }
@@ -305,28 +373,126 @@ impl<'a> Ctx<'a> {
         }
     }
 
-    fn dedupe_text(&mut self, text: &mut String, dedupe: bool) {
+    /// Replace a read's text with what the agent hasn't seen of it, and remember what it now has.
+    fn dedupe_text(&mut self, text: &mut String) {
         let hash = agentsh_platform::hash_bytes(text.as_bytes());
-        let Some(record) = self.read_log.iter().find(|r| r.hash == hash) else { return };
-        let (path, full) = (record.path.clone(), record.full);
-        let previous = self.state.shown.get(&path).cloned();
-        if dedupe && !full && previous.as_deref() == Some(hash.as_str()) {
-            *text = UNCHANGED_NOTE.into();
+        let Some(record) = self.read_log.iter().find(|r| r.hash == hash).cloned() else { return };
+        if let Some(outline) = record.outline.as_ref().filter(|_| !record.full) {
+            *text = outline.clone();
             return;
         }
-        let original = std::mem::take(text);
-        *text = match previous.as_deref().filter(|_| dedupe && !full).and_then(|h| self.load_shown(h)) {
-            Some(old) => {
-                let diff = similar::TextDiff::from_lines(&old, &original).unified_diff().context_radius(2).to_string();
-                if diff.len() * 10 < original.len() * 6 { format!("{CHANGED_NOTE}\n{diff}") } else { original.clone() }
-            }
-            None => original.clone(),
-        };
-        if let Some(old_hash) = previous.filter(|h| *h != hash) {
-            let _ = std::fs::remove_file(self.shown_dir().join(old_hash));
+        if !self.dedupes() {
+            return;
         }
-        self.save_shown(&hash, &original);
-        self.state.shown.insert(path, hash);
+        if let Some(display) = &record.display {
+            *text = display.clone();
+        }
+        let Some(file_text) = self.load_shown(&record.file_hash) else { return };
+        let lines: Vec<&str> = file_text.lines().collect();
+        let (start, end) = (record.start.min(lines.len()), record.end.min(lines.len()));
+        let mut view = self.state.views.remove(&record.path).unwrap_or_default();
+        view.remember(lines[start..end].iter().copied());
+        // If the view moved on after this read (the agent edited the file later in this run),
+        // carry what this read showed forward instead of going back to the older version.
+        let on_disk = hash_file(&record.path).unwrap_or_default();
+        if !view.hash.is_empty()
+            && view.hash != record.file_hash
+            && view.hash == on_disk
+            && let Some(newer) = self.load_shown(&view.hash)
+        {
+            let mut merged = crate::seen::carry(&file_text, &record.known, &newer);
+            for (m, k) in merged.iter_mut().zip(view.known.flags(newer.lines().count())) {
+                *m |= k;
+            }
+            let hash = view.hash.clone();
+            self.set_view(&record.path, view, &hash, &merged);
+            return;
+        }
+        self.set_view(&record.path, view, &record.file_hash, &record.known);
+    }
+
+    /// The agent's known lines of `path`, carried over to `current`, and how the lines it knew
+    /// changed since it saw them: (known, (changed spans, removed-after spans)).
+    pub fn carried_view(&self, path: &Path, current: &str) -> (Vec<bool>, crate::seen::Changes) {
+        let len = current.lines().count();
+        let Some(view) = self.state.views.get(path) else { return (vec![false; len], Default::default()) };
+        if view.hash == agentsh_platform::hash_bytes(current.as_bytes()) {
+            return (view.known.flags(len), Default::default());
+        }
+        let Some(old) = self.load_shown(&view.hash) else { return (vec![false; len], Default::default()) };
+        let old_known = view.known.flags(old.lines().count());
+        let changes = crate::seen::changes_to_known(&old, &old_known, current);
+        (crate::seen::carry(&old, &old_known, current), changes)
+    }
+
+    /// The agent's view of `path`, if it has one (for commands that leave out what it has seen).
+    pub fn view(&self, path: &Path) -> Option<&crate::seen::View> {
+        if self.dedupes() { self.state.views.get(path) } else { None }
+    }
+
+    /// Record that the agent now knows `known` lines (and `view.ever`) of `path` as it is now.
+    pub fn set_view(&mut self, path: &Path, mut view: crate::seen::View, file_hash: &str, known: &[bool]) {
+        if !self.dedupes() {
+            return;
+        }
+        if !view.hash.is_empty() && view.hash != file_hash && !self.read_log.iter().any(|r| r.file_hash == view.hash) {
+            let _ = std::fs::remove_file(self.shown_dir().join(&view.hash));
+        }
+        view.hash = file_hash.to_string();
+        view.known = crate::seen::Lines::from_flags(known);
+        self.state.views.insert(path.to_path_buf(), view);
+    }
+
+    /// Like `set_view`, for a file version whose text isn't saved yet.
+    pub fn set_view_text(&mut self, path: &Path, view: crate::seen::View, text: &str, known: &[bool]) {
+        if !self.dedupes() || text.len() > MAX_SHOWN_BYTES {
+            return;
+        }
+        let hash = agentsh_platform::hash_bytes(text.as_bytes());
+        self.save_shown(&hash, text);
+        self.set_view(path, view, &hash, known);
+    }
+
+    /// The agent wrote `new` over `old` through agentsh: it knows the lines it wrote.
+    fn note_own_write(&mut self, path: &Path, old: &str, new: &str) {
+        if !self.dedupes() || new.len() > MAX_SHOWN_BYTES {
+            return;
+        }
+        let (old_known, _) = self.carried_view(path, old);
+        let mut view = self.state.views.remove(path).unwrap_or_default();
+        let known = crate::seen::carry_own_edit(old, &old_known, new, &mut view);
+        let hash = agentsh_platform::hash_bytes(new.as_bytes());
+        self.save_shown(&hash, new);
+        self.set_view(path, view, &hash, &known);
+    }
+
+    /// Files the agent is up to date on, to tell it afterwards which ones a program changed.
+    pub fn views_snapshot(&self) -> Vec<(PathBuf, String)> {
+        if !self.dedupes() {
+            return Vec::new();
+        }
+        self.state
+            .views
+            .iter()
+            .filter_map(|(p, v)| hash_file(p).ok().filter(|h| *h == v.hash).map(|h| (p.clone(), h)))
+            .collect()
+    }
+
+    pub fn report_changed(&mut self, before: Vec<(PathBuf, String)>, program: &str) {
+        let mut changed: Vec<String> = before
+            .iter()
+            .filter(|(p, h)| hash_file(p).ok().as_ref() != Some(h))
+            .map(|(p, _)| self.display(p))
+            .collect();
+        if changed.is_empty() {
+            return;
+        }
+        changed.sort();
+        let what = if changed.len() == 1 { "a file" } else { "files" };
+        self.warn(format!(
+            "`{program}` changed {what} you've read: {}; reading again shows only what changed",
+            changed.join(", ")
+        ));
     }
 
     pub fn dedupe_repeat(&mut self, label: &str, value: &mut Value) {
@@ -363,6 +529,36 @@ impl<'a> Ctx<'a> {
             self.warnings.push(message);
         }
     }
+}
+
+fn slice_lines(lines: &[&str], start: usize, end: usize, numbers: bool) -> String {
+    let body: Vec<String> =
+        (start..end).map(|i| if numbers { format!("{}\t{}", i + 1, lines[i]) } else { lines[i].to_string() }).collect();
+    body.join("\n") + "\n"
+}
+
+/// "[changed since you last saw it: ...]" for the changes that touch lines `start..end`.
+fn changes_note(changes: &crate::seen::Changes, start: usize, end: usize) -> Option<String> {
+    let (changed, removed) = (&changes.changed, &changes.removed);
+    let changed: Vec<(usize, usize)> = changed.iter().copied().filter(|&(a, b)| a <= end && b > start).collect();
+    let removed: Vec<(usize, usize)> = removed.iter().copied().filter(|&(at, _)| at >= start && at <= end).collect();
+    if changed.is_empty() && removed.is_empty() {
+        return None;
+    }
+    let mut parts = Vec::new();
+    if !changed.is_empty() {
+        let word = if changed.len() == 1 && changed[0].0 == changed[0].1 { "line" } else { "lines" };
+        parts.push(format!("{word} {}", crate::seen::spans_text(&changed)));
+    }
+    for (at, n) in removed.iter().take(4) {
+        let what = if *n == 1 { "1 line".to_string() } else { format!("{n} lines") };
+        parts.push(if *at == 0 {
+            format!("{what} removed at the top")
+        } else {
+            format!("{what} removed after line {at}")
+        });
+    }
+    Some(format!("[changed since you last saw it: {}]", parts.join("; ")))
 }
 
 pub fn normalize(path: &Path) -> PathBuf {

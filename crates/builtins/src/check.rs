@@ -20,7 +20,8 @@ pub const CHECK: Builtin = Builtin {
         params: &[
             P::pos("task", T::Str, "\"test\" (default), \"build\" or \"lint\""),
             P::named("cmd", T::Str, "command to run instead of the detected one"),
-            P::named("args", T::Arg, "extra arguments, e.g. a test name filter").variadic(),
+            P::named("args", T::Arg, "extra arguments, e.g. a test name filter; one string is split like a shell line")
+                .variadic(),
             P::named("timeout", T::Duration, "default 10m"),
             P::named("keep", T::Bool, "on failure keep the run's earlier file changes"),
         ],
@@ -31,6 +32,7 @@ pub const CHECK: Builtin = Builtin {
             "check",
             "check \"lint\"",
             "check args:\"parser\"",
+            "check args:\"src/a.test.ts src/b.test.ts\"",
             "edit \"src/a.rs\" old:\"x\" new:\"y\"; check keep:true",
         ],
     },
@@ -62,7 +64,16 @@ fn check(ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
                 .with_hint(format!("pass the command: check \"{task}\" cmd:\"...\""))
         })?,
     };
-    argv.extend(args.strings("args")?);
+    // One string is split like a shell line ("--run a.test.ts b.test.ts"); a list is used as is.
+    let extra = match args.strings("args")?.as_slice() {
+        [line] => crate::exec::shell_words(line)?,
+        many => many.to_vec(),
+    };
+    // npm only passes arguments on to the script after `--`; pnpm, yarn and bun pass them anyway.
+    if !extra.is_empty() && argv.len() == 3 && argv[0] == "npm" && argv[1] == "run" {
+        argv.push("--".into());
+    }
+    argv.extend(extra);
     let command = argv.join(" ");
     let timeout = args.opt_secs("timeout")?.unwrap_or(DEFAULT_TIMEOUT_SECS);
     let keep = args.flag("keep")?;
@@ -71,6 +82,7 @@ fn check(ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
     let summary = summarize(parser.as_ref(), &captured);
     let exit_ok = exit_failure(ctx, &argv[0], &captured, &[0], timeout);
     if exit_ok.is_ok() && summary.failed.unwrap_or(0) == 0 {
+        ctx.state.checks.remove(&command);
         ctx.exec_completed = true;
         let mut record = vec![("command", Value::Str(command))];
         if let Some(p) = summary.passed {
@@ -82,7 +94,18 @@ fn check(ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
     if keep {
         ctx.keep_on_failure = true;
     }
-    Err(failure_error(&command, &summary, exit_ok.err()))
+    let mut err = failure_error(&command, &summary, exit_ok.err());
+    if ctx.dedupes() && !summary.failures.is_empty() {
+        let fingerprint = agentsh_platform::hash_bytes(format!("{:?}", summary.failures).as_bytes());
+        if ctx.state.checks.get(&command) == Some(&fingerprint) {
+            // The agent saw these failures last time: name them, don't repeat the messages.
+            let names: Vec<&str> = summary.failures.iter().take(MAX_FAILURES).map(|(name, _)| name.as_str()).collect();
+            err.message.push_str(" (the same failures as the last run)");
+            err.value = Some(names.join("\n"));
+        }
+        ctx.state.checks.insert(command, fingerprint);
+    }
+    Err(err)
 }
 
 fn failure_error(command: &str, summary: &Summary, exit_error: Option<ShellError>) -> ShellError {

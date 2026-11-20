@@ -773,7 +773,7 @@
           "read \"a.txt\""
         ],
         "expect": {
-          "value": "beta\n"
+          "value~": "unchanged since you last read it"
         }
       },
       {
@@ -833,7 +833,7 @@
           "read \"big.txt\""
         ],
         "expect": {
-          "value~": "+line thirty"
+          "value~": "unchanged since you last read it"
         }
       },
       {
@@ -1070,6 +1070,236 @@
         "expect": {
           "truncated": null,
           "value~": "line 2000"
+        }
+      }
+    ]
+  },
+  {
+    "name": "named sessions leave out lines the agent has already seen",
+    "files": {
+      "big.txt": "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40\nline 41\nline 42\nline 43\nline 44\nline 45\nline 46\nline 47\nline 48\nline 49\nline 50\nline 51\nline 52\nline 53\nline 54\nline 55\nline 56\nline 57\nline 58\nline 59\n"
+    },
+    "steps": [
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "read \"big.txt\" from:1 to:20"
+        ],
+        "expect": {
+          "value~": "line 19"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "read \"big.txt\" from:10 to:30"
+        ],
+        "expect": {
+          "value~": "[lines 10–20: already shown, unchanged]"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "read \"big.txt\" from:10 to:30"
+        ],
+        "expect": {
+          "value~": "lines 10–30 of `big.txt`: already shown, unchanged"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "edit \"big.txt\" old:\"line 25\\n\" new:\"line XXV\\n\"\nread \"big.txt\" from:20 to:30"
+        ],
+        "expect": {
+          "value~": "already shown, unchanged"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "--allow",
+          "exec",
+          "run",
+          "exec \"perl\" \"-pi\" \"-e\" \"s/^line 15$/line fifteen/\" \"big.txt\""
+        ],
+        "expect": {
+          "warnings.0~": "changed a file you've read: big.txt"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "read \"big.txt\" from:1 to:30"
+        ],
+        "expect": {
+          "value~": "[changed since you last saw it: line 16]"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "read \"big.txt\" from:1 to:30 full:true"
+        ],
+        "expect": {
+          "value~": "line fifteen"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "forget"
+        ],
+        "expect": {
+          "value~": "forgot"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "run",
+          "read \"big.txt\" from:1 to:5"
+        ],
+        "expect": {
+          "value": "line 0\nline 1\nline 2\nline 3\nline 4\n"
+        }
+      },
+      {
+        "run": "read \"big.txt\" from:1 to:5",
+        "expect": {
+          "value": "line 0\nline 1\nline 2\nline 3\nline 4\n"
+        }
+      },
+      {
+        "run": "read \"big.txt\" from:1 to:5",
+        "expect": {
+          "value": "line 0\nline 1\nline 2\nline 3\nline 4\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "a whole-file read of a long source file shows its outline; the value is still the whole file",
+    "files": {
+      "big.rs": "fn f0() {\n    0\n}\nfn f1() {\n    1\n}\nfn f2() {\n    2\n}\nfn f3() {\n    3\n}\nfn f4() {\n    4\n}\nfn f5() {\n    5\n}\nfn f6() {\n    6\n}\nfn f7() {\n    7\n}\nfn f8() {\n    8\n}\nfn f9() {\n    9\n}\nfn f10() {\n    10\n}\nfn f11() {\n    11\n}\nfn f12() {\n    12\n}\nfn f13() {\n    13\n}\nfn f14() {\n    14\n}\nfn f15() {\n    15\n}\nfn f16() {\n    16\n}\nfn f17() {\n    17\n}\nfn f18() {\n    18\n}\nfn f19() {\n    19\n}\nfn f20() {\n    20\n}\nfn f21() {\n    21\n}\nfn f22() {\n    22\n}\nfn f23() {\n    23\n}\nfn f24() {\n    24\n}\nfn f25() {\n    25\n}\nfn f26() {\n    26\n}\nfn f27() {\n    27\n}\nfn f28() {\n    28\n}\nfn f29() {\n    29\n}\nfn f30() {\n    30\n}\nfn f31() {\n    31\n}\nfn f32() {\n    32\n}\nfn f33() {\n    33\n}\nfn f34() {\n    34\n}\nfn f35() {\n    35\n}\nfn f36() {\n    36\n}\nfn f37() {\n    37\n}\nfn f38() {\n    38\n}\nfn f39() {\n    39\n}\nfn f40() {\n    40\n}\nfn f41() {\n    41\n}\nfn f42() {\n    42\n}\nfn f43() {\n    43\n}\nfn f44() {\n    44\n}\nfn f45() {\n    45\n}\nfn f46() {\n    46\n}\nfn f47() {\n    47\n}\nfn f48() {\n    48\n}\nfn f49() {\n    49\n}\nfn f50() {\n    50\n}\nfn f51() {\n    51\n}\nfn f52() {\n    52\n}\nfn f53() {\n    53\n}\nfn f54() {\n    54\n}\nfn f55() {\n    55\n}\nfn f56() {\n    56\n}\nfn f57() {\n    57\n}\nfn f58() {\n    58\n}\nfn f59() {\n    59\n}\nfn f60() {\n    60\n}\nfn f61() {\n    61\n}\nfn f62() {\n    62\n}\nfn f63() {\n    63\n}\nfn f64() {\n    64\n}\nfn f65() {\n    65\n}\nfn f66() {\n    66\n}\nfn f67() {\n    67\n}\nfn f68() {\n    68\n}\nfn f69() {\n    69\n}\nfn f70() {\n    70\n}\nfn f71() {\n    71\n}\nfn f72() {\n    72\n}\nfn f73() {\n    73\n}\nfn f74() {\n    74\n}\nfn f75() {\n    75\n}\nfn f76() {\n    76\n}\nfn f77() {\n    77\n}\nfn f78() {\n    78\n}\nfn f79() {\n    79\n}\nfn f80() {\n    80\n}\nfn f81() {\n    81\n}\nfn f82() {\n    82\n}\nfn f83() {\n    83\n}\nfn f84() {\n    84\n}\nfn f85() {\n    85\n}\nfn f86() {\n    86\n}\nfn f87() {\n    87\n}\nfn f88() {\n    88\n}\nfn f89() {\n    89\n}\nfn f90() {\n    90\n}\nfn f91() {\n    91\n}\nfn f92() {\n    92\n}\nfn f93() {\n    93\n}\nfn f94() {\n    94\n}\nfn f95() {\n    95\n}\nfn f96() {\n    96\n}\nfn f97() {\n    97\n}\nfn f98() {\n    98\n}\nfn f99() {\n    99\n}\nfn f100() {\n    100\n}\nfn f101() {\n    101\n}\nfn f102() {\n    102\n}\nfn f103() {\n    103\n}\nfn f104() {\n    104\n}\nfn f105() {\n    105\n}\nfn f106() {\n    106\n}\nfn f107() {\n    107\n}\nfn f108() {\n    108\n}\nfn f109() {\n    109\n}\nfn f110() {\n    110\n}\nfn f111() {\n    111\n}\nfn f112() {\n    112\n}\nfn f113() {\n    113\n}\nfn f114() {\n    114\n}\nfn f115() {\n    115\n}\nfn f116() {\n    116\n}\nfn f117() {\n    117\n}\nfn f118() {\n    118\n}\nfn f119() {\n    119\n}\nfn f120() {\n    120\n}\nfn f121() {\n    121\n}\nfn f122() {\n    122\n}\nfn f123() {\n    123\n}\nfn f124() {\n    124\n}\nfn f125() {\n    125\n}\nfn f126() {\n    126\n}\nfn f127() {\n    127\n}\nfn f128() {\n    128\n}\nfn f129() {\n    129\n}\nfn f130() {\n    130\n}\nfn f131() {\n    131\n}\nfn f132() {\n    132\n}\nfn f133() {\n    133\n}\nfn f134() {\n    134\n}\nfn f135() {\n    135\n}\nfn f136() {\n    136\n}\nfn f137() {\n    137\n}\nfn f138() {\n    138\n}\nfn f139() {\n    139\n}\nfn f140() {\n    140\n}\nfn f141() {\n    141\n}\nfn f142() {\n    142\n}\nfn f143() {\n    143\n}\nfn f144() {\n    144\n}\nfn f145() {\n    145\n}\nfn f146() {\n    146\n}\nfn f147() {\n    147\n}\nfn f148() {\n    148\n}\nfn f149() {\n    149\n}\n"
+    },
+    "steps": [
+      {
+        "run": "read \"big.rs\"",
+        "expect": {
+          "value~": "has 450 lines, so here is its outline"
+        }
+      },
+      {
+        "run": "read \"big.rs\" | count",
+        "expect": {
+          "value": 450
+        }
+      },
+      {
+        "run": "read \"big.rs\" full:true",
+        "expect": {
+          "value~": "fn f149() {"
+        }
+      },
+      {
+        "run": "read \"big.rs\" symbol:\"f7\"",
+        "expect": {
+          "value": "fn f7() {\n    7\n}\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "git.diff leaves out hunks the agent has already seen",
+    "allow": [
+      "exec"
+    ],
+    "files": {
+      "a.txt": "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40\nline 41\nline 42\nline 43\nline 44\nline 45\nline 46\nline 47\nline 48\nline 49\nline 50\nline 51\nline 52\nline 53\nline 54\nline 55\nline 56\nline 57\nline 58\nline 59\n",
+      "b.txt": "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20\nline 21\nline 22\nline 23\nline 24\nline 25\nline 26\nline 27\nline 28\nline 29\nline 30\nline 31\nline 32\nline 33\nline 34\nline 35\nline 36\nline 37\nline 38\nline 39\nline 40\nline 41\nline 42\nline 43\nline 44\nline 45\nline 46\nline 47\nline 48\nline 49\nline 50\nline 51\nline 52\nline 53\nline 54\nline 55\nline 56\nline 57\nline 58\nline 59\n"
+    },
+    "steps": [
+      {
+        "cli": [
+          "--session",
+          "t",
+          "--allow",
+          "exec",
+          "run",
+          "exec \"git\" \"init\" \"-q\"\nexec \"git\" \"add\" \"-A\"\nexec \"git\" \"-c\" \"user.name=t\" \"-c\" \"user.email=t@t\" \"commit\" \"-qm\" \"init\""
+        ],
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "--allow",
+          "exec",
+          "run",
+          "edit \"a.txt\" old:\"line 30\\n\" new:\"line thirty\\n\"\ngit.diff"
+        ],
+        "expect": {
+          "value~": "no changes you haven't seen; changed, as you've already seen: a.txt"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "--allow",
+          "exec",
+          "run",
+          "exec \"perl\" \"-pi\" \"-e\" \"s/^line 40$/line forty/\" \"b.txt\"\ngit.diff"
+        ],
+        "expect": {
+          "value~": "+line forty"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "--allow",
+          "exec",
+          "run",
+          "git.diff"
+        ],
+        "expect": {
+          "value~": "a.txt, b.txt"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "t",
+          "--allow",
+          "exec",
+          "run",
+          "git.diff full:true"
+        ],
+        "expect": {
+          "value~": "+line thirty"
         }
       }
     ]

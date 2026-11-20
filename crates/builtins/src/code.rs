@@ -37,23 +37,30 @@ fn outline(ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
     let text = read_text(ctx, &path)?;
     ctx.mark_seen(&path);
     let max_depth = args.opt_usize("depth")?;
-    let lines: Vec<&str> = text.lines().collect();
-    let unit = indent_unit(&lines);
-    let rows = lines
-        .iter()
-        .enumerate()
-        .filter_map(|(i, line)| DECLARATION.captures(line).map(|c| (i, line, c[1].len())))
-        .map(|(i, line, indent)| (i, line, indent / unit))
-        .filter(|(_, _, depth)| max_depth.is_none_or(|m| *depth <= m))
-        .map(|(i, line, depth)| {
+    let rows = outline_rows(&text, max_depth)
+        .into_iter()
+        .map(|(line, depth, decl)| {
             Value::record([
-                ("line", Value::Int(i as i64 + 1)),
+                ("line", Value::Int(line as i64)),
                 ("depth", Value::Int(depth as i64)),
-                ("decl", Value::Str(clip(line.trim()))),
+                ("decl", Value::Str(decl)),
             ])
         })
         .collect();
     Ok(Value::List(rows))
+}
+
+/// (1-based line, nesting depth, declaration) for each declaration in a source file.
+pub fn outline_rows(text: &str, max_depth: Option<usize>) -> Vec<(usize, usize, String)> {
+    let lines: Vec<&str> = text.lines().collect();
+    let unit = indent_unit(&lines);
+    lines
+        .iter()
+        .enumerate()
+        .filter_map(|(i, line)| DECLARATION.captures(line).map(|c| (i, line, c[1].len() / unit)))
+        .filter(|(_, _, depth)| max_depth.is_none_or(|m| *depth <= m))
+        .map(|(i, line, depth)| (i + 1, depth, clip(line.trim())))
+        .collect()
 }
 
 pub const REFS: Builtin = Builtin {

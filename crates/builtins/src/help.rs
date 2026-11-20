@@ -17,7 +17,9 @@ const SYNTAX: &str = r##"SYNTAX
 const RESULTS: &str = r#"RESULTS
   Value first, then effects + undo token (agentsh undo u_N), warnings; or `error <code>: msg` + hint.
   Long output is cut: $rN holds the full value, $_ the previous one. Edits fail `stale` if the
-  file changed since you read it. help "<cmd>" shows every option."#;
+  file changed since you read it. help "<cmd>" shows every option.
+  In a named session (-s NAME) reads and git.diff leave out what you've already seen, including
+  your own edits; full:true shows it again, and `forget` resets it after your context was cut."#;
 
 const PACKAGES: &str = r#"PACKAGES
   Packages add check runners and commands named pkg.cmd (js.scripts). `env` lists the ones this
