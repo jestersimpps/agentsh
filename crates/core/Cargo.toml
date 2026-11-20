@@ -2,6 +2,7 @@
 name = "agentsh-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 agentsh-spec.workspace = true

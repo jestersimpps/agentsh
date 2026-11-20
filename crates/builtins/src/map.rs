@@ -96,7 +96,7 @@ fn render(node: &Node, level: usize, max_depth: usize, lines: &mut Vec<String>) 
             *by_ext.entry(ext).or_default() += 1;
         }
         let mut exts: Vec<(String, usize)> = by_ext.into_iter().collect();
-        exts.sort_by(|a, b| b.1.cmp(&a.1));
+        exts.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         let summary: Vec<String> = exts.iter().map(|(e, n)| format!("{e} {n}")).collect();
         lines.push(format!("{indent}{} files: {}", node.files.len(), summary.join(", ")));
     }

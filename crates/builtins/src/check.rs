@@ -302,7 +302,7 @@ fn go_summary(text: &str) -> Summary {
         })
         .collect();
     let failed = failures.len() as u64;
-    Summary { passed: Some(OK.find_iter(text).count() as u64).filter(|_| failed == 0), failed: Some(failed), failures }
+    Summary { passed: (failed == 0).then(|| OK.find_iter(text).count() as u64), failed: Some(failed), failures }
 }
 
 fn swift_summary(text: &str) -> Summary {

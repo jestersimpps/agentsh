@@ -2,6 +2,7 @@
 name = "agentsh"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "A shell for AI agents: a small regular language, one JSON envelope per call, undo, capabilities and a sandbox."
 
 [[bin]]

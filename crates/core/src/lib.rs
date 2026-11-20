@@ -24,5 +24,5 @@ pub use limits::smart_truncate;
 pub use registry::{Builtin, CommandSpec, ParamSpec, ParamType, Registry};
 pub use shell::{Shell, ShellOptions};
 pub use suggest::closest;
-pub use time::{iso, iso_ago, iso_now};
+pub use time::{iso, iso_ago, iso_now, wait_duration};
 pub use walk::{WalkOptions, compile_glob, glob_paths, walk};

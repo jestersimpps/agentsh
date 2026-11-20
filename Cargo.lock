@@ -32,6 +32,7 @@ dependencies = [
  "serde_json",
  "similar",
  "strsim",
+ "tempfile",
 ]
 
 [[package]]

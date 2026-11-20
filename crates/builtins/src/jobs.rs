@@ -171,7 +171,7 @@ fn wait_ready(mut child: Child, log: &Path, until: Option<&Regex>, wait: f64) ->
             _ => Readiness::Running,
         };
     };
-    let deadline = Instant::now() + Duration::from_secs_f64(wait.max(0.0));
+    let deadline = Instant::now() + agentsh_core::wait_duration(wait);
     loop {
         let exited = child.try_wait().ok().flatten();
         if pattern.is_match(&read_log(log)) {

@@ -4,7 +4,6 @@ use agentsh_platform::Capability::Exec;
 use agentsh_platform::{ExecOutput, ExecRequest, run_exec};
 use agentsh_spec::{ErrorCode, Value};
 use std::path::PathBuf;
-use std::time::Duration;
 
 const ERROR_TAIL_LINES: usize = 15;
 const ERROR_TAIL_BYTES: usize = 1_500;
@@ -80,7 +79,7 @@ pub fn run_captured(ctx: &mut Ctx, spec: RunSpec) -> Result<Captured> {
             cwd: &spec.cwd,
             stdin: spec.stdin,
             env: &spec.env,
-            timeout: Duration::from_secs_f64(spec.timeout.max(0.01)),
+            timeout: agentsh_core::wait_duration(spec.timeout),
             capture_limit: ctx.config.limits.exec_capture_bytes,
             policy: &policy,
         },
