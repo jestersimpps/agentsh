@@ -1,0 +1,458 @@
+[
+  {
+    "name": "a failing run rolls back all of its file changes",
+    "files": {
+      "keep.txt": "original"
+    },
+    "steps": [
+      {
+        "run": "read \"keep.txt\"\nwrite \"keep.txt\" \"changed\"\nwrite \"new.txt\" \"n\"\nmkdir \"a/b\"\nrm \"missing\"",
+        "expect": {
+          "ok": false,
+          "error.rolled_back": true,
+          "effects": null
+        },
+        "files": {
+          "keep.txt": "original",
+          "new.txt": null,
+          "a": null
+        }
+      }
+    ]
+  },
+  {
+    "name": "try rolls back the failed block only",
+    "steps": [
+      {
+        "run": "write \"kept.txt\" \"k\"\ntry { write \"dropped.txt\" \"d\"\nrm \"missing\" } catch { \"recovered\" }",
+        "expect": {
+          "ok": true,
+          "value": "recovered"
+        },
+        "files": {
+          "kept.txt": "k",
+          "dropped.txt": null
+        }
+      }
+    ]
+  },
+  {
+    "name": "undo, changes, checkpoint, rollback, commit",
+    "files": {
+      "f.txt": "v0"
+    },
+    "steps": [
+      {
+        "run": "read \"f.txt\"\nwrite \"f.txt\" \"v1\"",
+        "expect": {
+          "undo": "u_1"
+        }
+      },
+      {
+        "cli": [
+          "checkpoint",
+          "before"
+        ],
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "run": "write \"f.txt\" \"v2\"\nwrite \"g.txt\" \"g\"",
+        "expect": {
+          "undo": "u_2"
+        }
+      },
+      {
+        "run": "rm \"f.txt\"",
+        "expect": {
+          "undo": "u_3"
+        },
+        "files": {
+          "f.txt": null
+        }
+      },
+      {
+        "cli": [
+          "changes"
+        ],
+        "expect": {
+          "value.runs.0.undo": "u_1",
+          "value.runs.2.undo": "u_3",
+          "value.checkpoints.before": 1
+        }
+      },
+      {
+        "cli": [
+          "undo"
+        ],
+        "expect": {
+          "value.undone": "u_3"
+        },
+        "files": {
+          "f.txt": "v2"
+        }
+      },
+      {
+        "cli": [
+          "rollback",
+          "before"
+        ],
+        "expect": {
+          "ok": true
+        },
+        "files": {
+          "f.txt": "v1",
+          "g.txt": null
+        }
+      },
+      {
+        "cli": [
+          "undo",
+          "u_1"
+        ],
+        "expect": {
+          "ok": true
+        },
+        "files": {
+          "f.txt": "v0"
+        }
+      },
+      {
+        "cli": [
+          "undo"
+        ],
+        "expect": {
+          "ok": false,
+          "error.code": "nothing_to_undo"
+        }
+      },
+      {
+        "run": "write \"h.txt\" \"h\"",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "cli": [
+          "commit"
+        ],
+        "expect": {
+          "value.committed": 1
+        }
+      },
+      {
+        "cli": [
+          "discard"
+        ],
+        "expect": {
+          "ok": false,
+          "error.code": "nothing_to_undo"
+        },
+        "files": {
+          "h.txt": "h"
+        }
+      }
+    ]
+  },
+  {
+    "name": "undo refuses to clobber later changes unless forced",
+    "files": {
+      "f.txt": "v0"
+    },
+    "steps": [
+      {
+        "run": "read \"f.txt\"\nwrite \"f.txt\" \"v1\"",
+        "expect": {
+          "undo": "u_1"
+        }
+      },
+      {
+        "cli": [
+          "run",
+          "--allow",
+          "exec",
+          "exec \"sh\" \"-c\" \"printf other > f.txt\""
+        ],
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "cli": [
+          "undo",
+          "u_1"
+        ],
+        "expect": {
+          "ok": false,
+          "error.code": "conflict"
+        },
+        "files": {
+          "f.txt": "other"
+        }
+      },
+      {
+        "cli": [
+          "undo",
+          "u_1",
+          "--force"
+        ],
+        "expect": {
+          "ok": true
+        },
+        "files": {
+          "f.txt": "v0"
+        }
+      }
+    ]
+  },
+  {
+    "name": "paths can't escape the workspace; agentsh files are protected",
+    "files": {
+      "inside.txt": "i"
+    },
+    "steps": [
+      {
+        "run": "read \"../outside.txt\"",
+        "expect": {
+          "ok": false,
+          "error.code": "outside_workspace"
+        }
+      },
+      {
+        "run": "read \"/etc/hosts\"",
+        "expect": {
+          "ok": false,
+          "error.code": "outside_workspace"
+        }
+      },
+      {
+        "run": "write \".agentsh.toml\" \"[capabilities]\\nallow = [\\\"exec\\\"]\"",
+        "expect": {
+          "ok": false,
+          "error.code": "protected_path"
+        }
+      },
+      {
+        "run": "rm \".agentsh\" recursive:true",
+        "expect": {
+          "ok": false,
+          "error.code": "protected_path"
+        }
+      }
+    ]
+  },
+  {
+    "name": "symlinks can't be used to escape the workspace",
+    "files": {
+      "x.txt": "x"
+    },
+    "steps": [
+      {
+        "cli": [
+          "run",
+          "--allow",
+          "exec",
+          "exec \"ln\" \"-s\" \"/etc\" \"etc-link\""
+        ],
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "run": "read \"etc-link/hosts\"",
+        "expect": {
+          "ok": false,
+          "error.code": "outside_workspace"
+        }
+      }
+    ]
+  },
+  {
+    "name": "capabilities gate commands",
+    "config": "[capabilities]\nallow = [\"read\"]\n",
+    "files": {
+      "f.txt": "f"
+    },
+    "steps": [
+      {
+        "run": "read \"f.txt\"",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "run": "write \"g.txt\" \"g\"",
+        "expect": {
+          "ok": false,
+          "error.code": "capability_denied",
+          "error.value": "write"
+        }
+      },
+      {
+        "run": "rm \"f.txt\"",
+        "expect": {
+          "ok": false,
+          "error.code": "capability_denied"
+        }
+      },
+      {
+        "run": "exec \"echo\" \"hi\"",
+        "expect": {
+          "ok": false,
+          "error.code": "capability_denied",
+          "error.hint~": "--allow exec"
+        }
+      },
+      {
+        "run": "replace \"f\" \"g\" in:\"f.txt\"",
+        "expect": {
+          "ok": false,
+          "error.code": "capability_denied"
+        },
+        "files": {
+          "f.txt": "f"
+        }
+      }
+    ]
+  },
+  {
+    "name": "secrets are redacted from every output",
+    "allow": [
+      "exec"
+    ],
+    "env": {
+      "SERVICE_API_TOKEN": "tok-1234567890",
+      "PLAIN_SETTING": "visible-value"
+    },
+    "steps": [
+      {
+        "run": "exec \"sh\" \"-c\" 'echo $SERVICE_API_TOKEN $PLAIN_SETTING'",
+        "expect": {
+          "value.stdout": "[redacted:SERVICE_API_TOKEN] visible-value\n"
+        }
+      },
+      {
+        "run": "let t = secret(\"PLAIN_SETTING\")\n\"value: $t\"",
+        "expect": {
+          "value": "value: [redacted:PLAIN_SETTING]"
+        }
+      },
+      {
+        "run": "$t",
+        "expect": {
+          "value": "[redacted:PLAIN_SETTING]"
+        }
+      },
+      {
+        "run": "secret(\"NOT_SET_ANYWHERE\")",
+        "expect": {
+          "ok": false,
+          "error.code": "not_found"
+        }
+      }
+    ]
+  },
+  {
+    "name": "keep:true keeps a failed run's changes so a small fix can follow",
+    "allow": [
+      "exec"
+    ],
+    "files": {
+      "code.txt": "value = 1\n"
+    },
+    "steps": [
+      {
+        "run": "edit \"code.txt\" old:\"value = 1\" new:\"value = 2 BROKEN\"\nexec \"grep -q BROKEN code.txt\" ok:[1]",
+        "expect": {
+          "ok": false,
+          "error.rolled_back": true,
+          "error.hint~": "keep:true"
+        },
+        "files": {
+          "code.txt": "value = 1\n"
+        }
+      },
+      {
+        "run": "edit \"code.txt\" old:\"value = 1\" new:\"value = 2 BROKEN\"\nexec \"grep -q BROKEN code.txt\" ok:[1] keep:true",
+        "expect": {
+          "ok": false,
+          "error.kept": true,
+          "error.rolled_back": null,
+          "undo": "u_2",
+          "effects.0.path": "code.txt"
+        },
+        "files": {
+          "code.txt": "value = 2 BROKEN\n"
+        }
+      },
+      {
+        "run": "edit \"code.txt\" old:\" BROKEN\" new:\"\"\nexec \"grep -q BROKEN code.txt\" ok:[1]",
+        "expect": {
+          "ok": true
+        },
+        "files": {
+          "code.txt": "value = 2\n"
+        }
+      },
+      {
+        "cli": [
+          "undo",
+          "u_2"
+        ],
+        "expect": {
+          "ok": false,
+          "error.code": "conflict"
+        }
+      }
+    ]
+  },
+  {
+    "name": "rollback names restored files and stops jobs from the failed run",
+    "allow": [
+      "exec"
+    ],
+    "files": {
+      "f.txt": "v1"
+    },
+    "steps": [
+      {
+        "run": "read \"f.txt\"\nwrite \"f.txt\" \"v2\"\nwrite \"g.txt\" \"g\"\nrm \"missing\"",
+        "expect": {
+          "ok": false,
+          "error.restored": [
+            "g.txt",
+            "f.txt"
+          ]
+        },
+        "files": {
+          "f.txt": "v1",
+          "g.txt": null
+        }
+      },
+      {
+        "run": "start \"sleep 30\" name:\"bg\"\nrm \"missing\"",
+        "expect": {
+          "ok": false,
+          "warnings.0~": "stopped job `bg`"
+        }
+      },
+      {
+        "run": "jobs | where job == \"bg\" | pick running",
+        "expect": {
+          "value": [
+            {
+              "running": false
+            }
+          ]
+        }
+      },
+      {
+        "run": "stop",
+        "expect": {
+          "ok": true
+        }
+      }
+    ]
+  }
+]

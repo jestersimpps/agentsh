@@ -1,0 +1,25 @@
+[package]
+name = "agentsh"
+version.workspace = true
+edition.workspace = true
+description = "A shell for AI agents: a small regular language, one JSON envelope per call, undo, capabilities and a sandbox."
+
+[[bin]]
+name = "agentsh"
+path = "src/main.rs"
+
+[dependencies]
+agentsh-spec.workspace = true
+agentsh-lang.workspace = true
+serde.workspace = true
+agentsh-platform.workspace = true
+agentsh-core.workspace = true
+agentsh-builtins.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+serde_json.workspace = true

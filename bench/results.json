@@ -1,0 +1,410 @@
+[
+  {
+    "task": "orient in a new repo",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 35,
+      "tokens_out": 71,
+      "bytes_out": 171,
+      "ms": 37.8242080041673
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 1,
+      "tokens_out": 155,
+      "bytes_out": 468,
+      "ms": 5.698291992302984
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 1,
+      "tokens_out": 138,
+      "bytes_out": 412,
+      "ms": 5.148541007656604
+    }
+  },
+  {
+    "task": "5 largest Rust files",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 22,
+      "tokens_out": 61,
+      "bytes_out": 188,
+      "ms": 49.09933399176225
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 26,
+      "tokens_out": 92,
+      "bytes_out": 293,
+      "ms": 5.620249983621761
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 26,
+      "tokens_out": 58,
+      "bytes_out": 168,
+      "ms": 5.566957988776267
+    }
+  },
+  {
+    "task": "file types in the repo",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 40,
+      "tokens_out": 32,
+      "bytes_out": 61,
+      "ms": 45.99116698955186
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 12,
+      "tokens_out": 58,
+      "bytes_out": 167,
+      "ms": 5.6581250100862235
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 12,
+      "tokens_out": 24,
+      "bytes_out": 42,
+      "ms": 6.31433300441131
+    }
+  },
+  {
+    "task": "find a definition and read it",
+    "bash": {
+      "calls": 2,
+      "tokens_in": 25,
+      "tokens_out": 158,
+      "bytes_out": 614,
+      "ms": 55.08979200385511
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 15,
+      "tokens_out": 210,
+      "bytes_out": 740,
+      "ms": 6.985332991462201
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 15,
+      "tokens_out": 167,
+      "bytes_out": 663,
+      "ms": 6.566084019141272
+    }
+  },
+  {
+    "task": "read a whole file",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 7,
+      "tokens_out": 486,
+      "bytes_out": 1842,
+      "ms": 22.811749979155138
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 584,
+      "bytes_out": 1966,
+      "ms": 4.700457997387275
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 486,
+      "bytes_out": 1842,
+      "ms": 4.881375003606081
+    }
+  },
+  {
+    "task": "read three files",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 16,
+      "tokens_out": 375,
+      "bytes_out": 1223,
+      "ms": 22.918917005881667
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 24,
+      "tokens_out": 476,
+      "bytes_out": 1525,
+      "ms": 5.006915976991877
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 24,
+      "tokens_out": 396,
+      "bytes_out": 1292,
+      "ms": 5.192207987420261
+    }
+  },
+  {
+    "task": "typo in a path, then recover",
+    "bash": {
+      "calls": 3,
+      "tokens_in": 20,
+      "tokens_out": 229,
+      "bytes_out": 784,
+      "ms": 66.88404202577658
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 13,
+      "tokens_out": 236,
+      "bytes_out": 748,
+      "ms": 4.918374994304031
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 13,
+      "tokens_out": 192,
+      "bytes_out": 669,
+      "ms": 4.936959012411535
+    }
+  },
+  {
+    "task": "edit one line and check the diff",
+    "bash": {
+      "calls": 2,
+      "tokens_in": 37,
+      "tokens_out": 131,
+      "bytes_out": 418,
+      "ms": 56.394417013507336
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 38,
+      "tokens_out": 49,
+      "bytes_out": 154,
+      "ms": 4.828541015740484
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 38,
+      "tokens_out": 20,
+      "bytes_out": 75,
+      "ms": 4.814916988834739
+    }
+  },
+  {
+    "task": "rename a function across files",
+    "bash": {
+      "calls": 2,
+      "tokens_in": 40,
+      "tokens_out": 19,
+      "bytes_out": 53,
+      "ms": 80.05045799654908
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 16,
+      "tokens_out": 91,
+      "bytes_out": 299,
+      "ms": 7.824625005014241
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 16,
+      "tokens_out": 35,
+      "bytes_out": 107,
+      "ms": 7.694833009736612
+    }
+  },
+  {
+    "task": "run tests, show the summary",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 30,
+      "tokens_out": 68,
+      "bytes_out": 188,
+      "ms": 114.63133301003836
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 35,
+      "tokens_out": 97,
+      "bytes_out": 274,
+      "ms": 94.96416599722579
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 35,
+      "tokens_out": 73,
+      "bytes_out": 202,
+      "ms": 95.69599997485057
+    }
+  },
+  {
+    "task": "bad edit + tests, then revert",
+    "bash": {
+      "calls": 3,
+      "tokens_in": 67,
+      "tokens_out": 71,
+      "bytes_out": 271,
+      "ms": 413.9319579990115
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 57,
+      "tokens_out": 231,
+      "bytes_out": 850,
+      "ms": 263.93462499254383
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 57,
+      "tokens_out": 184,
+      "bytes_out": 663,
+      "ms": 263.26008400064893
+    }
+  },
+  {
+    "task": "explore the project layout",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 13,
+      "tokens_out": 217,
+      "bytes_out": 672,
+      "ms": 50.158958008978516
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 1,
+      "tokens_out": 163,
+      "bytes_out": 426,
+      "ms": 5.3258340049069375
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 1,
+      "tokens_out": 146,
+      "bytes_out": 366,
+      "ms": 5.356374982511625
+    }
+  },
+  {
+    "task": "find where a function is used",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 178,
+      "bytes_out": 600,
+      "ms": 30.618624994531274
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 11,
+      "tokens_out": 58,
+      "bytes_out": 178,
+      "ms": 7.767750008497387
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 11,
+      "tokens_out": 36,
+      "bytes_out": 90,
+      "ms": 7.589832996018231
+    }
+  },
+  {
+    "task": "read one function from a big file",
+    "bash": {
+      "calls": 2,
+      "tokens_in": 29,
+      "tokens_out": 504,
+      "bytes_out": 2168,
+      "ms": 45.726750016910955
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 15,
+      "tokens_out": 432,
+      "bytes_out": 1539,
+      "ms": 5.158958985703066
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 15,
+      "tokens_out": 369,
+      "bytes_out": 1460,
+      "ms": 5.089040991151705
+    }
+  },
+  {
+    "task": "re-read a file after editing it",
+    "bash": {
+      "calls": 3,
+      "tokens_in": 39,
+      "tokens_out": 974,
+      "bytes_out": 3691,
+      "ms": 69.645000010496
+    },
+    "agentsh-json": {
+      "calls": 3,
+      "tokens_in": 48,
+      "tokens_out": 758,
+      "bytes_out": 2532,
+      "ms": 30.289542017271742
+    },
+    "agentsh-text": {
+      "calls": 3,
+      "tokens_in": 48,
+      "tokens_out": 602,
+      "bytes_out": 2246,
+      "ms": 30.16549997846596
+    }
+  },
+  {
+    "task": "revisit files during a session",
+    "bash": {
+      "calls": 4,
+      "tokens_in": 26,
+      "tokens_out": 1220,
+      "bytes_out": 4564,
+      "ms": 86.66754100704566
+    },
+    "agentsh-json": {
+      "calls": 4,
+      "tokens_in": 38,
+      "tokens_out": 843,
+      "bytes_out": 2804,
+      "ms": 17.01137502095662
+    },
+    "agentsh-text": {
+      "calls": 4,
+      "tokens_in": 38,
+      "tokens_out": 650,
+      "bytes_out": 2448,
+      "ms": 17.381500016199425
+    }
+  },
+  {
+    "task": "trivial call (overhead)",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 1,
+      "tokens_out": 41,
+      "bytes_out": 83,
+      "ms": 15.659208002034575
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 1,
+      "tokens_out": 17,
+      "bytes_out": 47,
+      "ms": 4.419667006004602
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 1,
+      "tokens_out": 1,
+      "bytes_out": 2,
+      "ms": 4.37262500054203
+    }
+  }
+]

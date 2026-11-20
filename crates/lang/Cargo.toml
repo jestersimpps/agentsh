@@ -1,0 +1,7 @@
+[package]
+name = "agentsh-lang"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+agentsh-spec.workspace = true

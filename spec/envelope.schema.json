@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Value"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "shown": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 0
+    },
+    "total": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint",
+      "minimum": 0
+    },
+    "handle": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "printed": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Value"
+      }
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Effect"
+      }
+    },
+    "undo": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ErrorInfo"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "session": {
+      "type": "string"
+    },
+    "ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "tokens_est": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "ok",
+    "ms",
+    "tokens_est"
+  ],
+  "$defs": {
+    "Value": {
+      "description": "Any JSON value: null, bool, number, string, list or record."
+    },
+    "Effect": {
+      "type": "object",
+      "properties": {
+        "op": {
+          "$ref": "#/$defs/EffectOp"
+        },
+        "path": {
+          "type": "string"
+        },
+        "to": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "op",
+        "path"
+      ]
+    },
+    "EffectOp": {
+      "type": "string",
+      "enum": [
+        "create",
+        "modify",
+        "delete",
+        "move",
+        "mkdir"
+      ]
+    },
+    "ErrorInfo": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string"
+        },
+        "arg": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rolled_back": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "parse_error",
+        "unknown_command",
+        "unknown_argument",
+        "missing_argument",
+        "type_error",
+        "invalid_value",
+        "not_found",
+        "already_exists",
+        "outside_workspace",
+        "protected_path",
+        "capability_denied",
+        "expectation_failed",
+        "stale",
+        "ambiguous_match",
+        "no_match",
+        "binary_file",
+        "exec_failed",
+        "timeout",
+        "conflict",
+        "nothing_to_undo",
+        "session_busy",
+        "io_error",
+        "internal"
+      ]
+    },
+    "Span": {
+      "type": "object",
+      "properties": {
+        "line": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "col": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "line",
+        "col"
+      ]
+    }
+  }
+}

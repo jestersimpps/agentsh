@@ -1,0 +1,629 @@
+[
+  {
+    "name": "where, sort, take, skip, first, last, pick, uniq, sum, count",
+    "steps": [
+      {
+        "run": "let rows = [{n: \"a\", s: 3}, {n: \"b\", s: 1}, {n: \"c\", s: null}, {n: \"d\", s: 2}]",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "run": "$rows | where .s > 1 | pick .n",
+        "expect": {
+          "value": [
+            {
+              "n": "a"
+            },
+            {
+              "n": "d"
+            }
+          ]
+        }
+      },
+      {
+        "run": "$rows | sort .s | pick .n",
+        "expect": {
+          "value": [
+            {
+              "n": "b"
+            },
+            {
+              "n": "d"
+            },
+            {
+              "n": "a"
+            },
+            {
+              "n": "c"
+            }
+          ]
+        }
+      },
+      {
+        "run": "$rows | sort .s desc:true | first",
+        "expect": {
+          "value": {
+            "n": "a",
+            "s": 3
+          }
+        }
+      },
+      {
+        "run": "$rows | skip 1 | take 2 | count",
+        "expect": {
+          "value": 2
+        }
+      },
+      {
+        "run": "$rows | last | pick .n",
+        "expect": {
+          "value": {
+            "n": "d"
+          }
+        }
+      },
+      {
+        "run": "$rows | sum .s",
+        "expect": {
+          "value": 6
+        }
+      },
+      {
+        "run": "[1, 2, 1, 3, 2] | uniq",
+        "expect": {
+          "value": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      {
+        "run": "\"a\\nb\\n\\nc\" | lines",
+        "expect": {
+          "value": [
+            "a",
+            "b",
+            "c"
+          ]
+        }
+      },
+      {
+        "run": "\"x\" | take 1",
+        "expect": {
+          "ok": false,
+          "error.code": "type_error",
+          "error.hint~": "lines"
+        }
+      },
+      {
+        "run": "$rows | where .s > \"x\"",
+        "expect": {
+          "ok": false,
+          "error.code": "type_error"
+        }
+      }
+    ]
+  },
+  {
+    "name": "json and print",
+    "files": {
+      "package.json": "{\"name\": \"demo\", \"version\": \"1.2.3\", \"deps\": {\"a\": \"^1\"}}"
+    },
+    "steps": [
+      {
+        "run": "read \"package.json\" | json | pick .name .version",
+        "expect": {
+          "value": {
+            "name": "demo",
+            "version": "1.2.3"
+          }
+        }
+      },
+      {
+        "run": "\"{bad\" | json",
+        "expect": {
+          "ok": false,
+          "error.code": "invalid_value"
+        }
+      },
+      {
+        "run": "print \"a\" 1\n[1, 2] | print | count",
+        "expect": {
+          "value": 2,
+          "printed": [
+            "a",
+            1,
+            [
+              1,
+              2
+            ]
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "large results are shortened and kept as a handle",
+    "config": "[limits]\nmax_items = 3\n",
+    "steps": [
+      {
+        "run": "for $i in [1, 2, 3, 4, 5, 6, 7] { $i }",
+        "expect": {
+          "value": [
+            1,
+            2,
+            3
+          ],
+          "shown": 3,
+          "total": 7,
+          "truncated": true,
+          "handle": "$r1"
+        }
+      },
+      {
+        "run": "$r1 | where $it > 0",
+        "expect": {
+          "ok": false
+        }
+      },
+      {
+        "run": "$r1 | skip 5",
+        "expect": {
+          "value": [
+            6,
+            7
+          ]
+        }
+      },
+      {
+        "run": "$_ | count",
+        "expect": {
+          "value": 2
+        }
+      }
+    ]
+  },
+  {
+    "name": "exec: records, parse modes, stdin, env, exit codes",
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "exec \"echo\" \"hello\" 42",
+        "expect": {
+          "value.exit": 0,
+          "value.stdout": "hello 42\n"
+        }
+      },
+      {
+        "run": "exec \"printf\" \"a\\nb\\n\" parse:\"lines\"",
+        "expect": {
+          "value": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      {
+        "run": "exec \"echo\" '{\"k\": [1, 2]}' parse:\"json\"",
+        "expect": {
+          "value": {
+            "k": [
+              1,
+              2
+            ]
+          }
+        }
+      },
+      {
+        "run": "\"piped stdin\" | exec \"cat\"",
+        "expect": {
+          "value.stdout": "piped stdin"
+        }
+      },
+      {
+        "run": "exec \"sh\" \"-c\" 'echo $GREETING' env:{GREETING: \"hey\"}",
+        "expect": {
+          "value.stdout": "hey\n"
+        }
+      },
+      {
+        "run": "exec \"sh\" \"-c\" \"echo boom >&2; exit 3\"",
+        "expect": {
+          "ok": false,
+          "error.code": "exec_failed",
+          "error.message~": "code 3",
+          "error.value": "boom"
+        }
+      },
+      {
+        "run": "exec \"sh\" \"-c\" \"exit 1\" ok:[0, 1] | pick .exit",
+        "expect": {
+          "value": {
+            "exit": 1
+          }
+        }
+      },
+      {
+        "run": "exec \"sh\" \"-c\" 'printf \"\\033[31mred\\033[0m\"'",
+        "expect": {
+          "value.stdout": "red"
+        }
+      },
+      {
+        "run": "exec \"echo hello   world\"",
+        "expect": {
+          "value.stdout": "hello world\n"
+        }
+      },
+      {
+        "run": "exec \"definitely-not-a-program-xyz\"",
+        "expect": {
+          "ok": false,
+          "error.code": "exec_failed"
+        }
+      },
+      {
+        "run": "exec \"printf '[%s]' 'a  b' c\" parse:\"text\"",
+        "expect": {
+          "value": "[a  b][c]"
+        }
+      },
+      {
+        "run": "exec \"echo 'unbalanced\"",
+        "expect": {
+          "ok": false,
+          "error.code": "invalid_value"
+        }
+      }
+    ]
+  },
+  {
+    "name": "exec never hangs: timeouts, stdin, background children",
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "exec \"sleep\" \"10\" timeout:300ms",
+        "expect": {
+          "ok": false,
+          "error.code": "timeout"
+        }
+      },
+      {
+        "run": "exec \"cat\"",
+        "expect": {
+          "ok": true,
+          "value.stdout": ""
+        }
+      },
+      {
+        "run": "exec \"sh\" \"-c\" \"sleep 30 & echo started\"",
+        "expect": {
+          "ok": true,
+          "value.stdout": "started\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "external programs written bash-style get the exact exec rewrite",
+    "steps": [
+      {
+        "run": "git status --porcelain",
+        "expect": {
+          "ok": false,
+          "error.hint": "`git` is an external program; run it with: exec 'git status --porcelain'"
+        }
+      },
+      {
+        "run": "git log | head",
+        "expect": {
+          "ok": false,
+          "error.hint": "`git` is an external program and this line uses shell features; run it with: exec \"sh\" \"-c\" 'git log | head'"
+        }
+      }
+    ]
+  },
+  {
+    "name": "help and env",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"x\"\n"
+    },
+    "steps": [
+      {
+        "run": "help \"compact\"",
+        "expect": {
+          "ok": true,
+          "value~": "SYNTAX"
+        }
+      },
+      {
+        "run": "help \"edit\" | pick .name .usage",
+        "expect": {
+          "value": {
+            "name": "edit",
+            "usage": "edit path old:str new:str [all:bool] [expect:int] [diff:bool]"
+          }
+        }
+      },
+      {
+        "run": "help \"fnd\"",
+        "expect": {
+          "ok": false,
+          "error.hint": "did you mean \"find\"?"
+        }
+      },
+      {
+        "run": "env | pick .project .capabilities .cwd",
+        "expect": {
+          "value": {
+            "project": [
+              "rust"
+            ],
+            "capabilities": [
+              "read",
+              "write",
+              "delete"
+            ],
+            "cwd": "."
+          }
+        }
+      },
+      {
+        "run": "help \"brief\"",
+        "expect": {
+          "value~": "also: "
+        }
+      }
+    ]
+  },
+  {
+    "name": "exec parse:text pipes into grep",
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "exec \"printf\" \"ok 1\\nFAILED 2\\nok 3\\n\" parse:\"text\" | grep \"FAILED\"",
+        "expect": {
+          "value": [
+            {
+              "line": 2,
+              "text": "FAILED 2"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "text format renders tables, errors and undo hints",
+    "files": {
+      "a.rs": "aaaa",
+      "bb.rs": "b"
+    },
+    "steps": [
+      {
+        "cli": [
+          "--format",
+          "text",
+          "run",
+          "find \".\" name:\"*.rs\" | pick .path .size"
+        ],
+        "expect_text": "path\tsize\na.rs\t4\nbb.rs\t1"
+      },
+      {
+        "cli": [
+          "--format",
+          "text",
+          "run",
+          "read \"c.rs\""
+        ],
+        "expect_text": "error not_found: `c.rs` does not exist\nvalue: c.rs\nhint: did you mean \"a.rs\"?\nat: line 1 col 1 in read"
+      },
+      {
+        "cli": [
+          "--format",
+          "text",
+          "run",
+          "write \"n.txt\" \"x\""
+        ],
+        "expect_text": "effects: created n.txt (undo u_3)"
+      }
+    ]
+  },
+  {
+    "name": "group counts rows per key",
+    "files": {
+      "a.rs": "",
+      "b.rs": "",
+      "c.md": "",
+      "d": ""
+    },
+    "steps": [
+      {
+        "run": "find \".\" type:\"file\" | group ext(.path)",
+        "expect": {
+          "value": [
+            {
+              "key": "rs",
+              "count": 2
+            },
+            {
+              "key": "",
+              "count": 1
+            },
+            {
+              "key": "md",
+              "count": 1
+            }
+          ]
+        }
+      },
+      {
+        "run": "[1, 1, 2] | group $it",
+        "expect": {
+          "ok": false
+        }
+      },
+      {
+        "run": "[{t: \"x\"}, {t: \"x\"}] | group .t rows:true | first | pick .count",
+        "expect": {
+          "value": {
+            "count": 2
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "check detects and summarizes",
+    "allow": [
+      "exec"
+    ],
+    "files": {
+      "Makefile": "test:\n\t@echo all good\nbuild:\n\t@echo building; exit 3\n"
+    },
+    "steps": [
+      {
+        "run": "check",
+        "expect": {
+          "ok": true,
+          "value.command": "make test"
+        }
+      },
+      {
+        "run": "check \"build\"",
+        "expect": {
+          "ok": false,
+          "error.code": "exec_failed",
+          "error.message": "`make build` failed"
+        }
+      },
+      {
+        "run": "check \"lint\"",
+        "expect": {
+          "ok": false,
+          "error.code": "not_found",
+          "error.hint~": "cmd:"
+        }
+      },
+      {
+        "run": "check cmd:\"sh -c 'echo fine'\"",
+        "expect": {
+          "ok": true,
+          "value.command": "sh -c echo fine"
+        }
+      },
+      {
+        "run": "check \"deploy\"",
+        "expect": {
+          "ok": false,
+          "error.code": "invalid_value"
+        }
+      }
+    ]
+  },
+  {
+    "name": "start runs a background job that outlives the call until stop",
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "start \"sh -c 'echo ready; sleep 30'\" name:\"svc\" until:\"ready\" timeout:10s",
+        "expect": {
+          "ok": true,
+          "value.job": "svc",
+          "value.ready": true,
+          "value.tail": "ready"
+        }
+      },
+      {
+        "run": "jobs | pick .job .running",
+        "expect": {
+          "value": [
+            {
+              "job": "svc",
+              "running": true
+            }
+          ]
+        }
+      },
+      {
+        "run": "logs \"svc\" tail:1",
+        "expect": {
+          "value": "ready"
+        }
+      },
+      {
+        "run": "logs \"svx\"",
+        "expect": {
+          "ok": false,
+          "error.code": "not_found",
+          "error.hint~": "svc"
+        }
+      },
+      {
+        "run": "stop \"svc\"",
+        "expect": {
+          "value.0.job": "svc",
+          "value.0.stopped": "terminated"
+        }
+      },
+      {
+        "run": "jobs",
+        "expect": {
+          "value": []
+        }
+      }
+    ]
+  },
+  {
+    "name": "start names jobs uniquely and stop with no name stops them all",
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "start \"sleep 30\"",
+        "expect": {
+          "value.job": "sleep",
+          "value.ready": true
+        }
+      },
+      {
+        "run": "start \"sleep\" \"30\"",
+        "expect": {
+          "value.job": "sleep-2"
+        }
+      },
+      {
+        "run": "start \"sleep 30\" name:\"sleep\"",
+        "expect": {
+          "ok": false,
+          "error.code": "already_exists"
+        }
+      },
+      {
+        "run": "stop | count",
+        "expect": {
+          "value": 2
+        }
+      },
+      {
+        "run": "stop \"sleep\"",
+        "expect": {
+          "ok": false,
+          "error.code": "not_found",
+          "error.hint~": "no jobs"
+        }
+      }
+    ]
+  }
+]

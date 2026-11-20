@@ -1,0 +1,502 @@
+[
+  {
+    "name": "literals, arithmetic and interpolation",
+    "steps": [
+      {
+        "run": "let n = 2 + 3 * 4\n\"n is $n, next ${n + 1}, size ${1kb}\"",
+        "expect": {
+          "ok": true,
+          "value": "n is 14, next 15, size 1000"
+        }
+      },
+      {
+        "run": "[1mb, 2kib, 30s, 5m, 1d, 500ms]",
+        "expect": {
+          "value": [
+            1000000,
+            2048,
+            30,
+            300,
+            86400,
+            0.5
+          ]
+        }
+      },
+      {
+        "run": "7 / 2",
+        "expect": {
+          "value": 3.5
+        }
+      },
+      {
+        "run": "8 / 2",
+        "expect": {
+          "value": 4
+        }
+      },
+      {
+        "run": "'raw $not_a_var'",
+        "expect": {
+          "value": "raw $not_a_var"
+        }
+      },
+      {
+        "run": "\"escaped \\$dollar\"",
+        "expect": {
+          "value": "escaped $dollar"
+        }
+      },
+      {
+        "run": "r#\"let s = \"a $b \\n\";\"#",
+        "expect": {
+          "value": "let s = \"a $b \\n\";"
+        }
+      },
+      {
+        "run": "\"\\\\d+\\\\.rs\" =~ \"x\"",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "run": "\"a.rs\" =~ \"^\\\\w+\\\\.rs$\"",
+        "expect": {
+          "value": true
+        }
+      }
+    ]
+  },
+  {
+    "name": "records, lists, accessors",
+    "steps": [
+      {
+        "run": "let r = {name: \"a\", tags: [\"x\", \"y\"], nested: {n: 1}}\n[$r.name, $r.tags[1], $r.tags[-1], $r.nested.n]",
+        "expect": {
+          "value": [
+            "a",
+            "y",
+            "y",
+            1
+          ]
+        }
+      },
+      {
+        "run": "$r.missing",
+        "expect": {
+          "ok": false,
+          "error.code": "not_found",
+          "error.hint": "fields: name, tags, nested"
+        }
+      },
+      {
+        "run": "let rows = [{a: 1}, {a: 2}]\n$rows.a",
+        "expect": {
+          "value": [
+            1,
+            2
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "variables persist across calls in a session",
+    "steps": [
+      {
+        "run": "let greeting = \"hi\"",
+        "expect": {
+          "ok": true,
+          "value": "$greeting = \"hi\""
+        }
+      },
+      {
+        "run": "\"${greeting} there\"",
+        "expect": {
+          "value": "hi there"
+        }
+      },
+      {
+        "run": "$greting",
+        "expect": {
+          "ok": false,
+          "error.code": "not_found",
+          "error.hint": "did you mean `$greeting`?"
+        }
+      }
+    ]
+  },
+  {
+    "name": "control flow",
+    "steps": [
+      {
+        "run": "for $i in [1, 2, 3] { $i * 10 }",
+        "expect": {
+          "value": [
+            10,
+            20,
+            30
+          ]
+        }
+      },
+      {
+        "run": "if 1 > 2 { \"a\" } else if 2 > 1 { \"b\" } else { \"c\" }",
+        "expect": {
+          "value": "b"
+        }
+      },
+      {
+        "run": "try { rm \"missing\" } catch $e { \"caught ${e.code}\" }",
+        "expect": {
+          "value": "caught not_found"
+        }
+      },
+      {
+        "run": "\"a\" in [\"a\", \"b\"] and \"ell\" in \"hello\" and not (\"z\" in \"abc\")",
+        "expect": {
+          "value": true
+        }
+      },
+      {
+        "run": "\"file.rs\" =~ \"\\\\.rs$\"",
+        "expect": {
+          "value": true
+        }
+      }
+    ]
+  },
+  {
+    "name": "functions",
+    "files": {
+      "a.md": "x",
+      "b.md": "y",
+      "c.txt": "z",
+      "sub/d.md": "w"
+    },
+    "steps": [
+      {
+        "run": "glob(\"*.md\")",
+        "expect": {
+          "value": [
+            "a.md",
+            "b.md"
+          ]
+        }
+      },
+      {
+        "run": "glob(\"**/*.md\")",
+        "expect": {
+          "value": [
+            "a.md",
+            "b.md",
+            "sub/d.md"
+          ]
+        }
+      },
+      {
+        "run": "[exists(\"a.md\"), exists(\"nope\"), len(\"héllo\"), upper(\"x\"), split(\"a,b\", \",\"), join([1, 2], \"-\"), int(\"42\"), basename(\"x/y.rs\"), dirname(\"x/y.rs\")]",
+        "expect": {
+          "value": [
+            true,
+            false,
+            5,
+            "X",
+            [
+              "a",
+              "b"
+            ],
+            "1-2",
+            42,
+            "y.rs",
+            "x"
+          ]
+        }
+      },
+      {
+        "run": "ago(1d) < now()",
+        "expect": {
+          "value": true
+        }
+      },
+      {
+        "run": "lenn(\"x\")",
+        "expect": {
+          "ok": false,
+          "error.code": "unknown_command",
+          "error.hint": "did you mean len()?"
+        }
+      }
+    ]
+  },
+  {
+    "name": "parse errors teach the syntax",
+    "steps": [
+      {
+        "run": "read src/main.rs",
+        "expect": {
+          "ok": false,
+          "error.code": "parse_error",
+          "error.hint": "quote it: \"src/main.rs\""
+        }
+      },
+      {
+        "run": "ls -la",
+        "expect": {
+          "ok": false,
+          "error.code": "parse_error",
+          "error.hint~": "key:value arguments, not flags"
+        }
+      },
+      {
+        "run": "ls \"a\" && ls \"b\"",
+        "expect": {
+          "ok": false,
+          "error.hint~": "use `and` for logic"
+        }
+      },
+      {
+        "run": "ls > \"out.txt\"",
+        "expect": {
+          "ok": false,
+          "error.message": "redirection isn't supported"
+        }
+      },
+      {
+        "run": "\"unterminated",
+        "expect": {
+          "ok": false,
+          "error.message": "unterminated string",
+          "error.span": {
+            "line": 1,
+            "col": 1
+          }
+        }
+      },
+      {
+        "run": "let = 1",
+        "expect": {
+          "ok": false,
+          "error.code": "parse_error"
+        }
+      },
+      {
+        "run": "[1, 2] | for $x in $_ { $x }",
+        "expect": {
+          "ok": false,
+          "error.hint~": "store the value first"
+        }
+      }
+    ]
+  },
+  {
+    "name": "unknown commands point to the right tool",
+    "steps": [
+      {
+        "run": "cat \"x\"",
+        "expect": {
+          "ok": false,
+          "error.code": "unknown_command",
+          "error.hint~": "read"
+        }
+      },
+      {
+        "run": "fnd \".\"",
+        "expect": {
+          "ok": false,
+          "error.hint": "did you mean `find`?"
+        }
+      },
+      {
+        "run": "ls \".\" al:true",
+        "expect": {
+          "ok": false,
+          "error.code": "unknown_argument",
+          "error.hint~": "did you mean `all:`?"
+        }
+      },
+      {
+        "run": "take",
+        "expect": {
+          "ok": false,
+          "error.code": "missing_argument"
+        }
+      },
+      {
+        "run": "take \"five\"",
+        "expect": {
+          "ok": false,
+          "error.code": "type_error",
+          "error.arg": "n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "repeated identical failures produce a warning",
+    "steps": [
+      {
+        "run": "read \"nope.txt\"",
+        "expect": {
+          "ok": false
+        }
+      },
+      {
+        "run": "read \"nope.txt\"",
+        "expect": {
+          "ok": false,
+          "warnings": null
+        }
+      },
+      {
+        "run": "read \"nope.txt\"",
+        "expect": {
+          "ok": false,
+          "warnings.0~": "failed 3 times"
+        }
+      }
+    ]
+  },
+  {
+    "name": "let prints a summary instead of the value",
+    "files": {
+      "a.txt": "x\n",
+      "b.txt": "y\n"
+    },
+    "steps": [
+      {
+        "run": "let files = find \".\"",
+        "expect": {
+          "value": "$files: list of 2 records {path, type, size, modified}"
+        }
+      },
+      {
+        "run": "$files | count",
+        "expect": {
+          "value": 2
+        }
+      },
+      {
+        "run": "let n = 5",
+        "expect": {
+          "value": "$n = 5"
+        }
+      }
+    ]
+  },
+  {
+    "name": "named sessions show a generic hint only once",
+    "steps": [
+      {
+        "cli": [
+          "--session",
+          "h",
+          "run",
+          "\"x\" | take 1"
+        ],
+        "expect": {
+          "ok": false,
+          "error.hint~": "lines"
+        }
+      },
+      {
+        "cli": [
+          "--session",
+          "h",
+          "run",
+          "\"y\" | take 1"
+        ],
+        "expect": {
+          "ok": false,
+          "error.hint": null
+        }
+      },
+      {
+        "run": "\"z\" | take 1",
+        "expect": {
+          "ok": false,
+          "error.hint~": "lines"
+        }
+      }
+    ]
+  },
+  {
+    "name": "every top-level statement's result is shown",
+    "files": {
+      "a.txt": "A\n",
+      "b.txt": "B\n"
+    },
+    "steps": [
+      {
+        "run": "read \"a.txt\"\nlet x = 1\nread \"b.txt\"",
+        "expect": {
+          "outputs": [
+            {
+              "statement": "[1] read \"a.txt\"",
+              "value": "A\n"
+            }
+          ],
+          "label": "[3] read \"b.txt\"",
+          "value": "B\n"
+        }
+      },
+      {
+        "cli": [
+          "--format",
+          "text",
+          "run",
+          "read \"a.txt\"\nread \"b.txt\""
+        ],
+        "expect_text": "─── [1] read\nA\n─── [2] read\nB"
+      },
+      {
+        "run": "read \"a.txt\"\nrm \"missing\"",
+        "expect": {
+          "ok": false,
+          "outputs.0.value": "A\n"
+        }
+      }
+    ]
+  },
+  {
+    "name": "bare names are row fields in row expressions",
+    "steps": [
+      {
+        "run": "let rows = [{n: \"a\", s: 3}, {n: \"b\", s: 1}]",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "run": "$rows | where s > 1 | pick n",
+        "expect": {
+          "value": [
+            {
+              "n": "a"
+            }
+          ]
+        }
+      },
+      {
+        "run": "$rows | sort s | pick n s",
+        "expect": {
+          "value": [
+            {
+              "n": "b",
+              "s": 1
+            },
+            {
+              "n": "a",
+              "s": 3
+            }
+          ]
+        }
+      },
+      {
+        "run": "read src",
+        "expect": {
+          "ok": false,
+          "error.hint~": "quote text"
+        }
+      }
+    ]
+  }
+]

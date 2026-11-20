@@ -1,0 +1,21 @@
+[package]
+name = "agentsh-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+agentsh-spec.workspace = true
+agentsh-lang.workspace = true
+agentsh-platform.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+indexmap.workspace = true
+regex.workspace = true
+strsim.workspace = true
+similar.workspace = true
+chrono.workspace = true
+globset.workspace = true
+ignore.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

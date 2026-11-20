@@ -1,0 +1,15 @@
+[package]
+name = "agentsh-builtins"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+agentsh-spec.workspace = true
+agentsh-lang.workspace = true
+agentsh-platform.workspace = true
+agentsh-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+similar.workspace = true
+strsim.workspace = true
