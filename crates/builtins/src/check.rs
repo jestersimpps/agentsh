@@ -1,5 +1,8 @@
 use crate::exec::{Captured, RunSpec, exit_failure, run_captured, split_single_command};
-use agentsh_core::{Args, Builtin, CommandSpec, Ctx, ParamSpec as P, ParamType as T, Result, ShellError, find_on_path};
+use agentsh_core::package::{CheckTask, TestParser};
+use agentsh_core::{
+    Args, Builtin, CommandSpec, Ctx, ParamSpec as P, ParamType as T, Registry, Result, ShellError, find_on_path,
+};
 use agentsh_platform::Capability::Exec;
 use agentsh_spec::{ErrorCode, Value};
 use regex::Regex;
@@ -34,16 +37,6 @@ pub const CHECK: Builtin = Builtin {
     run: check,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Runner {
-    Cargo,
-    Pytest,
-    Js,
-    Go,
-    Swift,
-    Generic,
-}
-
 #[derive(Default)]
 struct Summary {
     passed: Option<u64>,
@@ -58,13 +51,13 @@ fn check(ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
             .with_arg("task")
             .with_hint("use \"test\", \"build\" or \"lint\""));
     }
-    let (mut argv, runner) = match args.opt_str("cmd")? {
+    let (mut argv, parser) = match args.opt_str("cmd")? {
         Some(cmd) => {
             let argv = split_single_command(vec![cmd])?;
-            let runner = guess_runner(&argv);
-            (argv, runner)
+            let parser = recognize(ctx.registry, &argv);
+            (argv, parser)
         }
-        None => detect(&ctx.root, &task).ok_or_else(|| {
+        None => detect(ctx, &task).ok_or_else(|| {
             ShellError::new(ErrorCode::NotFound, format!("can't tell how to {task} this project"))
                 .with_hint(format!("pass the command: check \"{task}\" cmd:\"...\""))
         })?,
@@ -75,7 +68,7 @@ fn check(ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
     let keep = args.flag("keep")?;
     let cwd = ctx.root.clone();
     let captured = run_captured(ctx, RunSpec { argv: &argv, cwd, stdin: None, env: Vec::new(), timeout })?;
-    let summary = summarize(runner, &captured);
+    let summary = summarize(parser.as_ref(), &captured);
     let exit_ok = exit_failure(ctx, &argv[0], &captured, &[0], timeout);
     if exit_ok.is_ok() && summary.failed.unwrap_or(0) == 0 {
         ctx.exec_completed = true;
@@ -120,90 +113,113 @@ fn failure_error(command: &str, summary: &Summary, exit_error: Option<ShellError
         .with_hint("check keep:true keeps this run's changes for a small fix")
 }
 
-fn detect(root: &Path, task: &str) -> Option<(Vec<String>, Runner)> {
-    let argv = |parts: &[&str]| parts.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    if root.join("Cargo.toml").is_file() {
-        return Some(match task {
-            "test" => (argv(&["cargo", "test", "-q"]), Runner::Cargo),
-            "build" => (argv(&["cargo", "build", "-q"]), Runner::Generic),
-            _ => (argv(&["cargo", "clippy", "-q", "--all-targets"]), Runner::Generic),
-        });
+/// The first turned-on package whose marker files exist and that can run `task`, in load order;
+/// then a Makefile target of the same name.
+fn detect(ctx: &Ctx, task: &str) -> Option<(Vec<String>, Option<TestParser>)> {
+    for package in ctx.registry.enabled_packages() {
+        let Some(check) = &package.check else { continue };
+        let Some(spec) = check.tasks.get(task) else { continue };
+        if !package.detected(&ctx.root) {
+            continue;
+        }
+        let Some(argv) = task_argv(&ctx.root, spec) else { continue };
+        let parser = if task == "test" { check.parser.clone() } else { None };
+        return Some((argv, parser));
     }
-    if let Some(found) = detect_node(root, task) {
-        return Some(found);
-    }
-    if root.join("go.mod").is_file() {
-        return Some(match task {
-            "test" => (argv(&["go", "test", "./..."]), Runner::Go),
-            "build" => (argv(&["go", "build", "./..."]), Runner::Generic),
-            _ => (argv(&["go", "vet", "./..."]), Runner::Generic),
-        });
-    }
-    if root.join("Package.swift").is_file() {
-        return match task {
-            "test" => Some((argv(&["swift", "test"]), Runner::Swift)),
-            "build" => Some((argv(&["swift", "build"]), Runner::Generic)),
-            _ => None,
-        };
-    }
-    let python = ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "pytest.ini"]
-        .iter()
-        .any(|f| root.join(f).is_file());
-    if python {
-        return match task {
-            "test" => Some((argv(&["python3", "-m", "pytest", "-q"]), Runner::Pytest)),
-            "lint" if find_on_path("ruff").is_some() => Some((argv(&["ruff", "check", "."]), Runner::Generic)),
-            _ => None,
-        };
-    }
-    let makefile = std::fs::read_to_string(root.join("Makefile")).ok()?;
-    makefile.lines().any(|l| l.starts_with(&format!("{task}:"))).then(|| (argv(&["make", task]), Runner::Generic))
+    let makefile = std::fs::read_to_string(ctx.root.join("Makefile")).ok()?;
+    makefile
+        .lines()
+        .any(|l| l.starts_with(&format!("{task}:")))
+        .then(|| (vec!["make".to_string(), task.to_string()], None))
 }
 
-fn detect_node(root: &Path, task: &str) -> Option<(Vec<String>, Runner)> {
+fn task_argv(root: &Path, spec: &CheckTask) -> Option<Vec<String>> {
+    if let Some(tool) = &spec.requires
+        && find_on_path(tool).is_none()
+    {
+        return None;
+    }
+    if !spec.cmd.is_empty() {
+        return Some(spec.cmd.clone());
+    }
+    node_script(root, &spec.package_script)
+}
+
+/// `<manager> run <script>` for the first of `scripts` defined in package.json; the manager comes
+/// from the lockfile (pnpm, yarn, bun, else npm).
+fn node_script(root: &Path, scripts: &[String]) -> Option<Vec<String>> {
     let text = std::fs::read_to_string(root.join("package.json")).ok()?;
     let json: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let scripts = json.get("scripts")?.as_object()?;
-    let script = match task {
-        "lint" => ["lint", "typecheck", "check"].into_iter().find(|s| scripts.contains_key(*s))?,
-        other => scripts.contains_key(other).then_some(other)?,
-    };
+    let defined = json.get("scripts")?.as_object()?;
+    let script = scripts.iter().find(|s| defined.contains_key(s.as_str()))?;
     let manager = [("pnpm-lock.yaml", "pnpm"), ("yarn.lock", "yarn"), ("bun.lockb", "bun"), ("bun.lock", "bun")]
         .iter()
         .find(|(lock, _)| root.join(lock).is_file())
         .map(|(_, m)| *m)
         .unwrap_or("npm");
-    let runner = if task == "test" { Runner::Js } else { Runner::Generic };
-    Some((vec![manager.to_string(), "run".to_string(), script.to_string()], runner))
+    Some(vec![manager.to_string(), "run".to_string(), script.clone()])
 }
 
-fn guess_runner(argv: &[String]) -> Runner {
+/// For `check cmd:"..."`: the parser of the first package whose `recognize` patterns match.
+fn recognize(registry: &Registry, argv: &[String]) -> Option<TestParser> {
     let joined = argv.join(" ");
-    if joined.starts_with("cargo test") || joined.starts_with("cargo nextest") {
-        Runner::Cargo
-    } else if joined.contains("pytest") {
-        Runner::Pytest
-    } else if joined.starts_with("go test") {
-        Runner::Go
-    } else if joined.starts_with("swift test") || joined.contains("xcodebuild") {
-        Runner::Swift
-    } else if ["npm", "pnpm", "yarn", "bun", "npx", "jest", "vitest", "mocha"].iter().any(|p| argv[0] == *p) {
-        Runner::Js
-    } else {
-        Runner::Generic
+    registry
+        .enabled_packages()
+        .filter_map(|p| p.check.as_ref())
+        .find(|c| c.parser.is_some() && c.recognize.iter().any(|pattern| wildcard_match(pattern, &joined)))
+        .and_then(|c| c.parser.clone())
+}
+
+/// `*` matches any run of characters; everything else is literal; the whole string must match.
+fn wildcard_match(pattern: &str, text: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    let Some((first, rest)) = parts.split_first() else { return false };
+    let Some(mut remaining) = text.strip_prefix(first) else { return false };
+    let Some((last, middle)) = rest.split_last() else { return remaining.is_empty() };
+    for part in middle {
+        match remaining.find(part) {
+            Some(i) => remaining = &remaining[i + part.len()..],
+            None => return false,
+        }
+    }
+    remaining.len() >= last.len() && remaining.ends_with(last)
+}
+
+fn summarize(parser: Option<&TestParser>, captured: &Captured) -> Summary {
+    let text = format!("{}\n{}", captured.stdout, captured.stderr);
+    match parser {
+        None => Summary::default(),
+        Some(TestParser::Named(name)) => match name.as_str() {
+            "cargo" => cargo_summary(&text),
+            "pytest" => pytest_summary(&text),
+            "js" => js_summary(&text),
+            "go" => go_summary(&text),
+            "swift" => swift_summary(&text),
+            _ => Summary::default(),
+        },
+        Some(TestParser::Patterns { passed, failed, failure }) => {
+            pattern_summary(passed.as_deref(), failed.as_deref(), failure.as_deref(), &text)
+        }
     }
 }
 
-fn summarize(runner: Runner, captured: &Captured) -> Summary {
-    let text = format!("{}\n{}", captured.stdout, captured.stderr);
-    match runner {
-        Runner::Cargo => cargo_summary(&text),
-        Runner::Pytest => pytest_summary(&text),
-        Runner::Js => js_summary(&text),
-        Runner::Go => go_summary(&text),
-        Runner::Swift => swift_summary(&text),
-        Runner::Generic => Summary::default(),
-    }
+/// A package's `[check.patterns]`: `passed`/`failed` capture a count in group 1 (summed over all
+/// matches); `failure` captures a test name in group 1 and an optional message in group 2.
+fn pattern_summary(passed: Option<&str>, failed: Option<&str>, failure: Option<&str>, text: &str) -> Summary {
+    let compile = |p: Option<&str>| p.and_then(|p| Regex::new(p).ok());
+    let count = |re: Option<Regex>| re.and_then(|re| sum_captures(&re, text, 1));
+    let failures: Vec<(String, String)> = compile(failure)
+        .map(|re| {
+            re.captures_iter(text)
+                .filter_map(|c| {
+                    let name = c.get(1)?.as_str().to_string();
+                    Some((name, clip(c.get(2).map_or("", |m| m.as_str()))))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let failed = count(compile(failed)).or((failure.is_some()).then_some(failures.len() as u64));
+    Summary { passed: count(compile(passed)), failed, failures }
 }
 
 fn regex(pattern: &str) -> Regex {
@@ -342,6 +358,27 @@ mod tests {
         let s = pytest_summary(out);
         assert_eq!((s.passed, s.failed), (Some(3), Some(1)));
         assert_eq!(s.failures, vec![("tests/test_x.py::test_add".into(), "assert 3 == 4".into())]);
+    }
+
+    #[test]
+    fn wildcards() {
+        assert!(wildcard_match("cargo test*", "cargo test -q"));
+        assert!(wildcard_match("*pytest*", "python3 -m pytest -q"));
+        assert!(wildcard_match("npm", "npm"));
+        assert!(!wildcard_match("npm", "npmx"));
+        assert!(wildcard_match("npm *", "npm run test"));
+        assert!(!wildcard_match("go test*", "cargo test"));
+        assert!(wildcard_match("a*b*c", "a-b-c"));
+        assert!(!wildcard_match("a*b*c", "a-c"));
+    }
+
+    #[test]
+    fn package_patterns() {
+        let out = "ok one\nFAIL two: boom\nFAIL three\n2 ok, 2 failed\n";
+        let s = pattern_summary(Some(r"(\d+) ok"), None, Some(r"(?m)^FAIL (\w+)(?:: (.*))?$"), out);
+        assert_eq!(s.passed, Some(2));
+        assert_eq!(s.failed, Some(2));
+        assert_eq!(s.failures, vec![("two".into(), "boom".into()), ("three".into(), String::new())]);
     }
 
     #[test]

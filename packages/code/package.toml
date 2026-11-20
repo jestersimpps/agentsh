@@ -1,0 +1,4 @@
+name = "code"
+version = "0.1.0"
+summary = "understand and test code: project map, outlines, symbol references, test/build/lint runs"
+caps = ["read", "exec"]

@@ -1,0 +1,16 @@
+name = "python"
+version = "0.1.0"
+summary = "Python projects: pytest failure digests, ruff as lint when installed"
+caps = ["read", "exec"]
+detect = ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "pytest.ini"]
+
+[check]
+parser = "pytest"
+recognize = ["*pytest*"]
+
+[check.test]
+cmd = ["python3", "-m", "pytest", "-q"]
+
+[check.lint]
+cmd = ["ruff", "check", "."]
+requires = "ruff"

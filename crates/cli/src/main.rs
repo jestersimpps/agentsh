@@ -1,4 +1,6 @@
 mod cli_args;
+mod pkg;
+mod pkg_test;
 mod render;
 mod trace_report;
 
@@ -15,7 +17,8 @@ fn main() -> ExitCode {
     match &cli.command {
         Command::Schema => print_raw(&schema()),
         Command::Sandbox { policy, argv } => sandbox_exec(policy, argv),
-        Command::Help { topic } => help(topic.as_deref()),
+        Command::Help { topic } => help(&cli, topic.as_deref()),
+        Command::Pkg { action } => pkg::run(action, &cli),
         Command::Trace { file, top, pairs } => trace(&cli, file.clone(), *top, pairs.clone()),
         _ => run(cli),
     }
@@ -43,7 +46,11 @@ fn run(cli: Cli) -> ExitCode {
         Command::Discard { force } => shell.discard(*force),
         Command::Checkpoint { name } => shell.checkpoint(name),
         Command::Rollback { name, force } => shell.rollback(name, *force),
-        Command::Help { .. } | Command::Schema | Command::Sandbox { .. } | Command::Trace { .. } => unreachable!(),
+        Command::Help { .. }
+        | Command::Pkg { .. }
+        | Command::Schema
+        | Command::Sandbox { .. }
+        | Command::Trace { .. } => unreachable!(),
     };
     emit(&envelope, &cli)
 }
@@ -73,18 +80,31 @@ fn program_source(program: Option<&str>, file: Option<&std::path::Path>) -> Resu
     }
 }
 
-fn help(topic: Option<&str>) -> ExitCode {
+fn help(cli: &Cli, topic: Option<&str>) -> ExitCode {
     let registry = agentsh_builtins::registry();
     match topic {
         None | Some("compact") => print_raw(&agentsh_builtins::compact(&registry)),
         Some("brief") => print_raw(&agentsh_builtins::brief(&registry)),
-        Some(name) => match registry.get(name) {
-            Some(builtin) => print_raw(&agentsh_builtins::command_text(&builtin.spec)),
-            None => {
-                eprintln!("no command `{name}`; run `agentsh help` for the list");
-                ExitCode::from(2)
+        Some(name) => {
+            let (registry, root) = match pkg::active_registry(cli) {
+                Ok(found) => found,
+                Err(message) => {
+                    eprintln!("{message}");
+                    return ExitCode::from(2);
+                }
+            };
+            if name == "packages" {
+                return print_raw(&agentsh_builtins::packages_text(&registry, &root));
             }
-        },
+            match (registry.get(name), registry.package(name)) {
+                (Some(command), _) => print_raw(&agentsh_builtins::command_text(&command.spec)),
+                (None, Some(package)) => print_raw(&agentsh_builtins::package_text(&registry, package)),
+                (None, None) => {
+                    eprintln!("no command or package `{name}`; run `agentsh help` or `agentsh help packages`");
+                    ExitCode::from(2)
+                }
+            }
+        }
     }
 }
 

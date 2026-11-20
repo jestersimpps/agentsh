@@ -1,0 +1,359 @@
+[
+  {
+    "task": "what changed (status + line counts)",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 9,
+      "tokens_out": 31,
+      "ms": 55.828833021223545
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 2,
+      "tokens_out": 31,
+      "ms": 73.6875410657376
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 2,
+      "tokens_out": 59,
+      "ms": 74.5762080186978
+    }
+  },
+  {
+    "task": "review a branch vs main",
+    "bash": {
+      "calls": 3,
+      "tokens_in": 27,
+      "tokens_out": 299,
+      "ms": 94.80120800435543
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 28,
+      "tokens_out": 339,
+      "ms": 131.5677920356393
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 28,
+      "tokens_out": 483,
+      "ms": 133.9194169268012
+    }
+  },
+  {
+    "task": "read one function at another revision",
+    "bash": {
+      "calls": 2,
+      "tokens_in": 41,
+      "tokens_out": 508,
+      "ms": 61.80887506343424
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 19,
+      "tokens_out": 369,
+      "ms": 42.05100005492568
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 19,
+      "tokens_out": 432,
+      "ms": 43.72433398384601
+    }
+  },
+  {
+    "task": "search code at a revision",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 20,
+      "tokens_out": 192,
+      "ms": 38.28191594220698
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 17,
+      "tokens_out": 170,
+      "ms": 48.57512505259365
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 17,
+      "tokens_out": 241,
+      "ms": 46.68570903595537
+    }
+  },
+  {
+    "task": "list files at a revision",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 19,
+      "tokens_out": 130,
+      "ms": 31.085041002370417
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 16,
+      "tokens_out": 130,
+      "ms": 45.71916698478162
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 16,
+      "tokens_out": 146,
+      "ms": 46.236124937422574
+    }
+  },
+  {
+    "task": "recent commits touching a file",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 13,
+      "ms": 31.30479110404849
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 9,
+      "tokens_out": 27,
+      "ms": 44.7754169581458
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 9,
+      "tokens_out": 52,
+      "ms": 42.55512496456504
+    }
+  },
+  {
+    "task": "inspect the last commit",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 5,
+      "tokens_out": 162,
+      "ms": 31.47024998907
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 5,
+      "tokens_out": 93,
+      "ms": 73.71066696941853
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 5,
+      "tokens_out": 153,
+      "ms": 69.47162502910942
+    }
+  },
+  {
+    "task": "PR status with checks",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 74,
+      "tokens_out": 335,
+      "ms": 974.418165977113
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 86,
+      "ms": 903.8972499547526
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 106,
+      "ms": 869.7395420167595
+    }
+  },
+  {
+    "task": "which checks didn't pass",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 607,
+      "ms": 1212.4294590903446
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 11,
+      "tokens_out": 6,
+      "ms": 1214.881332940422
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 11,
+      "tokens_out": 22,
+      "ms": 1179.0737500414252
+    }
+  },
+  {
+    "task": "read a failed CI log",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 23,
+      "tokens_out": 5095,
+      "ms": 3103.173582931049
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 16,
+      "tokens_out": 3849,
+      "ms": 2937.2664579423144
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 16,
+      "tokens_out": 3964,
+      "ms": 2850.26441689115
+    }
+  },
+  {
+    "task": "TypeScript errors",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 12,
+      "tokens_out": 167,
+      "ms": 643.5844169463962
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 7,
+      "tokens_out": 164,
+      "ms": 400.95579193439335
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 7,
+      "tokens_out": 247,
+      "ms": 405.8311249827966
+    }
+  },
+  {
+    "task": "what's listening on which port",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 14,
+      "tokens_out": 1004,
+      "ms": 508.6931250989437
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 3,
+      "tokens_out": 317,
+      "ms": 536.5452920086682
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 3,
+      "tokens_out": 500,
+      "ms": 514.4429579377174
+    }
+  },
+  {
+    "task": "is a process running",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 15,
+      "tokens_out": 240,
+      "ms": 65.97416708245873
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 7,
+      "tokens_out": 170,
+      "ms": 38.82166696712375
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 7,
+      "tokens_out": 187,
+      "ms": 40.81833397503942
+    }
+  },
+  {
+    "task": "query a local JSON API",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 36,
+      "tokens_out": 422,
+      "ms": 32.47158299200237
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 34,
+      "tokens_out": 130,
+      "ms": 35.0850410759449
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 34,
+      "tokens_out": 243,
+      "ms": 31.42833395395428
+    }
+  },
+  {
+    "task": "read page 2 of a PDF",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 18,
+      "tokens_out": 993,
+      "ms": 24.835583055391908
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 992,
+      "ms": 35.592917003668845
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 10,
+      "tokens_out": 1010,
+      "ms": 41.55920795165002
+    }
+  },
+  {
+    "task": "list a zip archive",
+    "bash": {
+      "calls": 1,
+      "tokens_in": 8,
+      "tokens_out": 390,
+      "ms": 13.363749952986836
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 8,
+      "tokens_out": 98,
+      "ms": 25.554583058692515
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 8,
+      "tokens_out": 118,
+      "ms": 26.155416970141232
+    }
+  },
+  {
+    "task": "read the briefings used (once per session)",
+    "bash": {
+      "calls": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "ms": 0.000750063918530941
+    },
+    "agentsh-text": {
+      "calls": 1,
+      "tokens_in": 24,
+      "tokens_out": 1447,
+      "ms": 12.827957980334759
+    },
+    "agentsh-json": {
+      "calls": 1,
+      "tokens_in": 24,
+      "tokens_out": 1557,
+      "ms": 12.119374936446548
+    }
+  }
+]

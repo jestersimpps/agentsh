@@ -68,7 +68,7 @@ const PROJECT_MARKERS: &[(&str, &str)] = &[
 pub const ENV: Builtin = Builtin {
     spec: CommandSpec {
         name: "env",
-        summary: "orientation: root, project type, git branch, capabilities, sandbox, tools",
+        summary: "orientation: root, project type, packages for it, git branch, capabilities, sandbox, tools",
         params: &[],
         input: None,
         returns: "record",
@@ -84,6 +84,8 @@ fn env(ctx: &mut Ctx, _args: &mut Args) -> Result<Value> {
         .filter(|(file, _)| ctx.root.join(file).exists())
         .map(|(_, kind)| Value::str(*kind))
         .collect();
+    let packages: Vec<Value> =
+        ctx.registry.enabled_packages().filter(|p| p.detected(&ctx.root)).map(|p| Value::str(&p.name)).collect();
     let tools: Vec<Value> = TOOLS.iter().filter(|t| find_on_path(t).is_some()).map(|t| Value::str(*t)).collect();
     let caps: Vec<Value> = ctx.config.capabilities.iter().map(|c| Value::str(c.as_str())).collect();
     let undoable = ctx.journal.entries().iter().map(|e| e.run).collect::<std::collections::BTreeSet<_>>().len();
@@ -92,6 +94,7 @@ fn env(ctx: &mut Ctx, _args: &mut Args) -> Result<Value> {
         ("cwd", Value::Str(ctx.display(&ctx.cwd()))),
         ("os", Value::Str(format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH))),
         ("project", Value::List(project)),
+        ("packages", Value::List(packages)),
         ("git_branch", git_branch(ctx).map(Value::Str).unwrap_or_default()),
         ("capabilities", Value::List(caps)),
         ("sandbox", Value::str(ctx.sandbox.name())),

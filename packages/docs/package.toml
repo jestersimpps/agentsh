@@ -1,0 +1,44 @@
+name = "docs"
+version = "0.1.0"
+summary = "documents and archives: PDF text by page (pdftotext), zip listings and members (unzip)"
+caps = ["read", "exec"]
+
+[[command]]
+name = "pdf"
+summary = "text of a PDF, or of some pages, keeping the layout"
+params = [
+  { name = "path", type = "path", positional = true, required = true },
+  { name = "pages", type = "arg", doc = "a page (3) or a range (\"2-5\")" },
+  { name = "raw", type = "bool", doc = "reading order instead of layout (better for prose)" },
+]
+returns = "text"
+examples = ["docs.pdf \"contract.pdf\" pages:\"1-2\"", "docs.pdf \"invoice.pdf\" | grep \"Total\""]
+run = '''
+let argv = ["pdftotext"]
+if not $raw { let argv = $argv + ["-layout"] }
+if $pages != null {
+  let r = split(str($pages), "-")
+  let last = $r[len($r) - 1]
+  let argv = $argv + ["-f", $r[0], "-l", $last]
+}
+exec ($argv + [$path, "-"]) parse:"text"
+'''
+
+[[command]]
+name = "zip"
+summary = "the files in a zip archive"
+params = [{ name = "path", type = "path", positional = true, required = true }]
+returns = "list of member paths"
+examples = ["docs.zip \"export.zip\"", "docs.zip \"app.xlsx\" | grep \"sheet\""]
+run = 'exec "unzip" "-Z1" $path parse:"lines"'
+
+[[command]]
+name = "unzip"
+summary = "one member of a zip archive as text, without extracting anything"
+params = [
+  { name = "path", type = "path", positional = true, required = true },
+  { name = "member", type = "str", positional = true, required = true, doc = "path inside the archive" },
+]
+returns = "text"
+examples = ["docs.unzip \"report.docx\" \"word/document.xml\""]
+run = 'exec "unzip" "-p" $path $member parse:"text"'

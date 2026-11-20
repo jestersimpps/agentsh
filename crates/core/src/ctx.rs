@@ -34,6 +34,9 @@ pub struct Ctx<'a> {
     pub started_jobs: Vec<(String, u32)>,
     pub unshortened: bool,
     pub regex_cache: HashMap<String, Regex>,
+    /// While a package command runs: its package and the capabilities that package declared.
+    pub cap_ceiling: Option<(&'static str, &'static [Capability])>,
+    pub script_depth: usize,
 }
 
 pub struct ReadRecord {
@@ -58,6 +61,18 @@ impl<'a> Ctx<'a> {
     }
 
     pub fn require(&self, cap: Capability) -> Result<()> {
+        if let Some((package, caps)) = self.cap_ceiling
+            && !caps.contains(&cap)
+        {
+            return Err(ShellError::new(
+                ErrorCode::CapabilityDenied,
+                format!("package `{package}` doesn't declare the `{cap}` capability"),
+            )
+            .with_value(cap.as_str())
+            .with_hint(format!(
+                "package commands can only use the caps listed in their package.toml; `{package}` needs a fix"
+            )));
+        }
         if self.config.allows(cap) {
             return Ok(());
         }

@@ -15,6 +15,8 @@ pub const FUNCTIONS: &[(&str, &str)] = &[
     ("split(s, sep) join(list, sep)", "split a string / join a list of strings"),
     ("int(x) str(x)", "convert to int / string"),
     ("keys(record)", "a record's field names"),
+    ("get(record, key, default)", "a field, or default (null if omitted) when it's missing"),
+    ("match(s, regex)", "first match as [whole, group1, ...], or null; named groups give a record"),
     ("basename(path) dirname(path) ext(path)", "last path component / parent path / extension without the dot"),
     ("secret(name)", "a secret from env, .env or a configured command; redacted from all output"),
 ];
@@ -48,6 +50,25 @@ impl Ctx<'_> {
             }
             ("int", [v]) => to_int(v),
             ("str", [v]) => Ok(Value::Str(v.to_display_string())),
+            ("match", [Value::Str(s), Value::Str(pattern)]) => {
+                let re = self.regex(pattern)?;
+                Ok(match re.captures(s) {
+                    None => Value::Null,
+                    Some(c) if re.capture_names().flatten().next().is_some() => Value::Record(
+                        re.capture_names()
+                            .flatten()
+                            .map(|n| (n.to_string(), c.name(n).map(|m| Value::str(m.as_str())).unwrap_or(Value::Null)))
+                            .collect(),
+                    ),
+                    Some(c) => Value::List(
+                        c.iter().map(|m| m.map(|m| Value::str(m.as_str())).unwrap_or(Value::Null)).collect(),
+                    ),
+                })
+            }
+            ("get", [Value::Record(r), Value::Str(key)]) => Ok(r.get(key).cloned().unwrap_or(Value::Null)),
+            ("get", [Value::Record(r), Value::Str(key), default]) => Ok(r.get(key).cloned().unwrap_or(default.clone())),
+            ("get", [Value::Null, Value::Str(_)]) => Ok(Value::Null),
+            ("get", [Value::Null, Value::Str(_), default]) => Ok(default.clone()),
             ("keys", [Value::Record(r)]) => Ok(Value::List(r.keys().map(Value::str).collect())),
             ("basename", [Value::Str(p)]) => {
                 Ok(Value::Str(Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()))

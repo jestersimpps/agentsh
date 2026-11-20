@@ -1,0 +1,144 @@
+[
+  {
+    "name": "git commands read a repo as tables",
+    "allow": [
+      "exec"
+    ],
+    "files": {
+      "a.rs": "fn alpha() {\n  1\n}\n\nfn beta() {}\n"
+    },
+    "steps": [
+      {
+        "run": "exec \"git\" \"init\" \"-q\"\nexec \"git\" \"-c\" \"user.email=t@t\" \"-c\" \"user.name=t\" \"add\" \".\"\nexec \"git\" \"-c\" \"user.email=t@t\" \"-c\" \"user.name=t\" \"commit\" \"-qm\" \"first\"",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "run": "git.status",
+        "expect": {
+          "value": "clean"
+        }
+      },
+      {
+        "run": "edit \"a.rs\" old:\"  1\" new:\"  2\"\nwrite \"b.txt\" \"new\"\ngit.status",
+        "expect": {
+          "value": [
+            {
+              "xy": " M",
+              "path": "a.rs",
+              "added": 1,
+              "removed": 1
+            },
+            {
+              "xy": "??",
+              "path": "b.txt",
+              "added": null,
+              "removed": null
+            }
+          ]
+        }
+      },
+      {
+        "run": "git.diff stat:true",
+        "expect": {
+          "value": [
+            {
+              "path": "a.rs",
+              "added": "1",
+              "removed": "1"
+            }
+          ]
+        }
+      },
+      {
+        "run": "git.diff \"a.rs\"",
+        "expect": {
+          "value~": "+  2"
+        }
+      },
+      {
+        "run": "git.show \"HEAD\" \"a.rs\" symbol:\"alpha\"",
+        "expect": {
+          "value": "fn alpha() {\n  1\n}\n"
+        }
+      },
+      {
+        "run": "git.show \"HEAD\"",
+        "expect": {
+          "value": [
+            {
+              "path": "a.rs",
+              "added": "5",
+              "removed": "0"
+            }
+          ],
+          "printed.0~": "first"
+        }
+      },
+      {
+        "run": "git.grep \"BETA\" rev:\"HEAD\"",
+        "expect": {
+          "value": [
+            {
+              "path": "a.rs",
+              "line": 5,
+              "text": "fn beta() {}"
+            }
+          ]
+        }
+      },
+      {
+        "run": "git.grep \"nothing_like_this\"",
+        "expect": {
+          "value": null
+        }
+      },
+      {
+        "run": "git.files match:\"\\\\.rs$\"",
+        "expect": {
+          "value": [
+            "a.rs"
+          ]
+        }
+      },
+      {
+        "run": "git.log n:1 | pick .subject",
+        "expect": {
+          "value": [
+            {
+              "subject": "first"
+            }
+          ]
+        }
+      },
+      {
+        "run": "exec \"git\" \"-c\" \"user.email=t@t\" \"-c\" \"user.name=t\" \"commit\" \"-qam\" \"second\"\ngit.changed \"HEAD~1\"",
+        "expect": {
+          "value": [
+            {
+              "status": "M",
+              "path": "a.rs",
+              "added": "1",
+              "removed": "1"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "git commands need exec",
+    "files": {
+      "a.txt": "x"
+    },
+    "steps": [
+      {
+        "run": "git.status",
+        "expect": {
+          "error.code": "capability_denied"
+        }
+      }
+    ]
+  }
+]

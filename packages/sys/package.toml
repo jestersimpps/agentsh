@@ -1,0 +1,39 @@
+name = "sys"
+version = "0.1.0"
+summary = "local processes and ports: what is listening where, and which processes match a pattern"
+caps = ["read", "exec"]
+
+[[command]]
+name = "ports"
+summary = "TCP ports in LISTEN state with the owning process (lsof)"
+params = [{ name = "port", type = "int", positional = true, doc = "only this port" }]
+returns = "table of {port, pid, command, address}, or \"nothing is listening\""
+examples = ["sys.ports", "sys.ports 3000"]
+run = '''
+let argv = ["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"]
+if $port != null { let argv = ["lsof", "-nP", "-iTCP:${port}", "-sTCP:LISTEN"] }
+let rows = []
+for $l in (exec $argv ok:[0, 1] parse:"lines") {
+  let m = match($l, "^(\S+)\s+(\d+)\s.*\s(\S+):(\d+) \(LISTEN\)$")
+  if $m != null { let rows = $rows + [{port: int($m[4]), pid: int($m[2]), command: $m[1], address: $m[3]}] }
+}
+if len($rows) == 0 { "nothing is listening" } else { $rows | uniq | sort .port }
+'''
+
+[[command]]
+name = "procs"
+summary = "running processes whose command line matches a regex (pgrep, which works inside the sandbox)"
+params = [{ name = "pattern", type = "str", positional = true, required = true, doc = "extended regex over the full command line" }]
+returns = "table of {pid, command}"
+examples = ["sys.procs \"vite|next dev\"", "sys.procs \"postgres\""]
+run = '''
+let e = (env)
+let flags = "-lf"
+if $e.os =~ "^linux" { let flags = "-af" }
+let rows = []
+for $l in (exec "pgrep" $flags $pattern ok:[0, 1] parse:"lines") {
+  let m = match($l, "^(\\d+) (.*)$")
+  if $m != null and not ($m[2] =~ "sys\\.procs") { let rows = $rows + [{pid: int($m[1]), command: $m[2]}] }
+}
+if len($rows) == 0 { "no process matches `$pattern`" } else { $rows }
+'''

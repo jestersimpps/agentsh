@@ -1,0 +1,17 @@
+[
+  {
+    "name": "gh commands need exec and net",
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "gh.pr 1",
+        "expect": {
+          "error.code": "capability_denied",
+          "error.value": "net"
+        }
+      }
+    ]
+  }
+]

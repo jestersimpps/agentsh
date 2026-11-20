@@ -18,6 +18,8 @@ pub struct ConfigLayer {
     pub trace: TraceLayer,
     #[serde(default)]
     pub secrets: SecretsLayer,
+    #[serde(default)]
+    pub packages: PackagesLayer,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -67,4 +69,15 @@ pub struct SecretsLayer {
     pub redact_env: Option<Vec<String>>,
     #[serde(default)]
     pub commands: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackagesLayer {
+    #[serde(default)]
+    pub enable: Vec<String>,
+    #[serde(default)]
+    pub disable: Vec<String>,
+    #[serde(default)]
+    pub paths: Vec<PathBuf>,
 }

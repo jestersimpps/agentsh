@@ -7,12 +7,14 @@ mod fs;
 mod help;
 mod jobs;
 mod map;
+mod packages;
 mod text;
 mod util;
 
 use agentsh_core::Registry;
 
-pub use help::{brief, command_text, compact};
+pub use help::{brief, command_text, compact, package_text, packages_text};
+pub use packages::EMBEDDED;
 
 pub fn registry() -> Registry {
     let mut registry = Registry::default();
@@ -21,6 +23,7 @@ pub fn registry() -> Registry {
         fs::LS,
         fs::FIND,
         fs::READ,
+        fs::EXCERPT,
         fs::STAT,
         map::MAP,
         code::OUTLINE,
@@ -50,6 +53,7 @@ pub fn registry() -> Registry {
         text::LINES,
         data::JSON,
         data::PRINT,
+        data::FAIL,
         exec::EXEC,
         check::CHECK,
         jobs::START,
@@ -58,7 +62,11 @@ pub fn registry() -> Registry {
         jobs::STOP,
         help::HELP,
     ] {
-        registry.add(builtin);
+        match builtin.spec.name {
+            "map" | "outline" | "refs" | "check" => registry.add_to("code", builtin),
+            _ => registry.add(builtin),
+        }
     }
+    registry.embed(packages::EMBEDDED);
     registry
 }

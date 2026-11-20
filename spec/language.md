@@ -8,7 +8,7 @@ This document specifies the language and the envelope independently of the Rust 
 - **Strings** are always quoted. `"..."` interpolates `$name` and `${expr}` (inside `${}`, a leading bare name means the variable, so `${e.code}` = `${$e.code}`). Escapes: `\n \t \r \\ \" \$ \'`; any other backslash sequence is kept as written, so regexes like `"\d+\.rs"` work. `'...'` is raw: no escapes, no interpolation. `r"..."`, `r#"..."#`, `r##"..."##` are raw strings that may contain quotes; they end at the matching `"#…`, so code can be written without escaping.
 - **Numbers**: `42`, `-3`, `1.5`, `1_000`. Size suffixes give bytes: `b kb mb gb tb` (powers of 1000), `kib mib gib tib` (powers of 1024). Duration suffixes give seconds: `ms` (as a fraction) `s m h d w`.
 - **Literals**: `true false null`, lists `[a, b]`, records `{key: value, "any key": value}`.
-- **Names**: `$name` is a variable; `.field` (or `.a.b`) is a field of the current row; `name(` is a function call; `name:` is a named argument. A bare word is a command name in command position; as an argument of a row-expression parameter (`where`, `sort`, `pick`, `group`, `uniq`, `sum`) it means `.word`; anywhere else it is an error.
+- **Names**: `$name` is a variable; `.field` (or `.a.b`) is a field of the current row; `name(` is a function call; `name:` is a named argument. A bare word is a command name in command position, and so is `package.command` (two plain names joined by a dot, see [packages](packages.md)); as an argument of a row-expression parameter (`where`, `sort`, `pick`, `group`, `uniq`, `sum`) it means `.word`; anywhere else it is an error.
 - Unquoted paths, flags (`-la`), `&&`, `||`, `!`, redirections and backticks are parse errors with a hint showing the agentsh form.
 
 ## Grammar
@@ -23,6 +23,7 @@ stmt      = "let" name "=" pipeline
 block     = "{" program "}"
 pipeline  = ( call | expr ) { "|" call }
 call      = command { key ":" expr | expr }
+command   = name | name "." name           (package commands: js.scripts)
 expr      = or ;  or = and {"or" and} ;  and = not {"and" not} ;  not = "not" not | cmp
 cmp       = add [ ("==" | "!=" | "<" | "<=" | ">" | ">=" | "=~" | "!~" | "in") add ]
 add       = mul { ("+" | "-") mul } ;  mul = unary { ("*" | "/" | "%") unary }
@@ -84,6 +85,10 @@ Lists longer than `max_items` (default 50) are cut. Text longer than `max_string
 | `delete` | on | removing files (undoable) |
 | `exec` | off | running external programs |
 | `net` | off | network access for external programs (enforced by the sandbox) |
+
+## Packages
+
+Commands outside the core set come in packages, named `package.command`. A package may also supply `check` tasks (test, build, lint) and a briefing returned by `help "<package>"`. Packages run with the session's capabilities, further limited to the ones the package declares. See [packages.md](packages.md).
 
 ## Versioning
 

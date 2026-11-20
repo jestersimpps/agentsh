@@ -1,0 +1,15 @@
+name = "swift"
+version = "0.1.0"
+summary = "Swift packages: swift test failure digests (XCTest and Swift Testing)"
+caps = ["read", "exec"]
+detect = ["Package.swift"]
+
+[check]
+parser = "swift"
+recognize = ["swift test*", "*xcodebuild*"]
+
+[check.test]
+cmd = ["swift", "test"]
+
+[check.build]
+cmd = ["swift", "build"]

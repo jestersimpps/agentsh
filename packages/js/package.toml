@@ -1,0 +1,91 @@
+name = "js"
+version = "0.1.0"
+summary = "Node projects (npm, pnpm, yarn, bun): package.json scripts as check tasks, jest/vitest/mocha digests"
+caps = ["read", "exec"]
+detect = ["package.json"]
+
+[check]
+parser = "js"
+recognize = ["npm", "npm *", "pnpm", "pnpm *", "yarn", "yarn *", "bun", "bun *", "npx", "npx *", "jest*", "vitest*", "mocha*"]
+
+[check.test]
+package_script = ["test"]
+
+[check.build]
+package_script = ["build"]
+
+[check.lint]
+package_script = ["lint", "typecheck", "check"]
+
+[[command]]
+name = "scripts"
+summary = "the scripts in package.json"
+params = [{ name = "path", type = "path", positional = true, doc = "package.json to read (default: package.json)" }]
+returns = "table of {name, cmd}"
+caps = ["read"]
+examples = ["js.scripts", "js.scripts \"apps/web/package.json\""]
+run = '''
+let file = "package.json"
+if $path != null { let file = $path }
+let pkg = (read $file | json)
+let names = []
+if "scripts" in keys($pkg) { let names = keys($pkg.scripts) }
+if len($names) == 0 { [] } else {
+  for $name in $names { {name: $name, cmd: $pkg.scripts[$name]} }
+}
+'''
+
+[[command]]
+name = "typecheck"
+summary = "TypeScript errors as a table (tsc --noEmit), or parse tsc output you already have"
+params = [
+  { name = "project", type = "path", positional = true, doc = "tsconfig.json or its folder (default: tsc's own lookup)" },
+  { name = "output", type = "str", doc = "tsc output to parse instead of running tsc" },
+]
+input = "output"
+returns = "table of {file, line, col, code, message}, or \"no type errors\""
+caps = ["read"]
+examples = ["js.typecheck", "js.typecheck \"apps/web\"", "exec \"pnpm tsc --noEmit\" ok:[0, 2] parse:\"text\" | js.typecheck"]
+run = '''
+let text = $output
+if $text == null {
+  let tsc = "node_modules/.bin/tsc"
+  if not exists($tsc) {
+    fail "no TypeScript in node_modules/.bin" hint:"install it (npm i -D typescript), or pass tsc output: exec \"...\" parse:\"text\" | js.typecheck"
+  }
+  let argv = [$tsc, "--noEmit", "--pretty", "false"]
+  if $project != null { let argv = $argv + ["-p", $project] }
+  let r = (exec $argv ok:[0, 1, 2] timeout:10m)
+  let text = $r.stdout + $r.stderr
+  if $r.exit != 0 and not ($text =~ "error TS") { fail "tsc failed" value:$text }
+}
+let rows = []
+for $l in ($text | lines) {
+  let m = match($l, "^(.+?)\\((\\d+),(\\d+)\\): error (TS\\d+): (.*)$")
+  if $m != null { let rows = $rows + [{file: $m[1], line: int($m[2]), col: int($m[3]), code: $m[4], message: $m[5]}] }
+}
+if len($rows) == 0 { "no type errors" } else { $rows }
+'''
+
+[[command]]
+name = "run"
+summary = "run a package.json script with the project's package manager (from the lockfile)"
+params = [
+  { name = "script", type = "str", positional = true, required = true },
+  { name = "args", type = "arg", doc = "extra arguments after --", variadic = true },
+  { name = "timeout", type = "duration", doc = "default 10m" },
+]
+returns = "the script's output"
+caps = ["read", "exec"]
+examples = ["js.run \"build\"", "js.run \"test\" args:\"src/auth.test.ts\""]
+run = '''
+let mgr = "npm"
+if exists("bun.lockb") or exists("bun.lock") { let mgr = "bun" }
+if exists("yarn.lock") { let mgr = "yarn" }
+if exists("pnpm-lock.yaml") { let mgr = "pnpm" }
+let argv = [$mgr, "run", $script]
+if $args != null { let argv = $argv + ["--"] + $args }
+let t = 600
+if $timeout != null { let t = $timeout }
+exec $argv timeout:$t parse:"text"
+'''

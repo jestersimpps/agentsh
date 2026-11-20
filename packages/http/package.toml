@@ -1,0 +1,70 @@
+name = "http"
+version = "0.1.0"
+summary = "HTTP requests with curl: status line printed, JSON bodies parsed into values"
+caps = ["read", "exec", "net"]
+
+[[command]]
+name = "request"
+summary = "any HTTP request; get and post are shortcuts"
+params = [
+  { name = "method", type = "str", positional = true, required = true, doc = "GET, POST, PUT, PATCH, DELETE, ..." },
+  { name = "url", type = "str", positional = true, required = true },
+  { name = "json", type = "any", doc = "send this value as a JSON body" },
+  { name = "body", type = "str", doc = "send this text as the body" },
+  { name = "headers", type = "record", doc = "extra headers, e.g. {Authorization: \"Bearer ...\"}; use secret() for tokens" },
+  { name = "timeout", type = "int", doc = "seconds (default 30)" },
+]
+returns = "prints `<status> <content type>`; returns the body, parsed when it is JSON"
+examples = ["http.request \"DELETE\" \"http://localhost:3000/items/4\""]
+run = '''
+let secs = 30
+if $timeout != null { let secs = $timeout }
+let argv = ["curl", "-sS", "-L", "--max-time", str($secs), "-X", $method, "-w", "\n__agentsh_status__ %{http_code} %{content_type}"]
+if $headers != null {
+  for $k in keys($headers) {
+    let v = $headers[$k]
+    let argv = $argv + ["-H", "$k: $v"]
+  }
+}
+let out = ""
+if $json != null {
+  let out = (exec ($argv + ["-H", "content-type: application/json", "--data-binary", "@-", $url]) input:$json parse:"text")
+} else {
+  if $body != null {
+    let out = (exec ($argv + ["--data-binary", "@-", $url]) input:$body parse:"text")
+  } else {
+    let out = (exec ($argv + [$url]) parse:"text")
+  }
+}
+let parts = split($out, "\n__agentsh_status__ ")
+let meta = match($parts[len($parts) - 1], "^(\d+) ?(.*)$")
+print "${meta[1]} ${meta[2]}"
+let text = $parts[0]
+if $meta[2] =~ "json" and trim($text) != "" { $text | json } else { $text }
+'''
+
+[[command]]
+name = "get"
+summary = "GET a URL; prints the status and content type, returns the body (parsed when JSON)"
+params = [
+  { name = "url", type = "str", positional = true, required = true },
+  { name = "headers", type = "record", doc = "extra headers" },
+  { name = "timeout", type = "int", doc = "seconds (default 30)" },
+]
+returns = "the body: a value when JSON, else text"
+examples = ["http.get \"http://localhost:3000/api/health\"", "http.get \"https://api.github.com/repos/cli/cli\" | pick .stargazers_count"]
+run = 'http.request "GET" $url headers:$headers timeout:$timeout'
+
+[[command]]
+name = "post"
+summary = "POST JSON (json:) or text (body:); prints the status, returns the parsed response"
+params = [
+  { name = "url", type = "str", positional = true, required = true },
+  { name = "json", type = "any", doc = "value sent as JSON" },
+  { name = "body", type = "str", doc = "text body" },
+  { name = "headers", type = "record", doc = "extra headers" },
+  { name = "timeout", type = "int", doc = "seconds (default 30)" },
+]
+returns = "the response body: a value when JSON, else text"
+examples = ["http.post \"http://localhost:3000/api/items\" json:{name: \"x\"}"]
+run = 'http.request "POST" $url json:$json body:$body headers:$headers timeout:$timeout'

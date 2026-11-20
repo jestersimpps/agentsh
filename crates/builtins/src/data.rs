@@ -334,6 +334,34 @@ fn json(_ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
     })
 }
 
+pub const FAIL: Builtin = Builtin {
+    spec: CommandSpec {
+        name: "fail",
+        summary: "stop the run with an error (expectation_failed); its file changes roll back",
+        params: &[
+            P::pos("message", T::Str, "what went wrong").required(),
+            P::named("hint", T::Str, "what to do about it"),
+            P::named("value", T::Any, "details to show with the error"),
+        ],
+        input: None,
+        returns: "never returns",
+        caps: &[],
+        examples: &["if len($rows) == 0 { fail \"no rows\" hint:\"check the filter\" }"],
+    },
+    run: fail,
+};
+
+fn fail(_ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
+    let mut err = ShellError::new(ErrorCode::ExpectationFailed, args.str("message")?);
+    if let Some(hint) = args.opt_str("hint")? {
+        err = err.with_hint(hint);
+    }
+    if let Some(value) = args.take("value") {
+        err = err.with_value(value.to_display_string());
+    }
+    Err(err)
+}
+
 pub const PRINT: Builtin = Builtin {
     spec: CommandSpec {
         name: "print",

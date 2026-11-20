@@ -119,7 +119,6 @@ fn read_one(ctx: &mut Ctx, raw: &str, range: &LineRange, budget: usize) -> Resul
     }
     let text = read_text(ctx, &path)?;
     ctx.mark_seen(&path);
-    let LineRange { from, to, tail, numbers, .. } = range.clone();
     if range.is_whole() {
         if text.len() <= budget {
             ctx.note_read(&path, &text, range.full);
@@ -132,12 +131,19 @@ fn read_one(ctx: &mut Ctx, raw: &str, range: &LineRange, budget: usize) -> Resul
         }
         return Ok(text);
     }
+    slice_text(raw, &text, range)
+}
+
+/// The lines `range` selects from `text` (from/to, tail, or one symbol); `label` names the source in errors.
+fn slice_text(label: &str, text: &str, range: &LineRange) -> Result<String> {
+    let LineRange { from, to, tail, numbers, .. } = range.clone();
+    let raw = label;
     let lines: Vec<&str> = text.lines().collect();
     let total = lines.len();
     let (start, end) = match (&range.symbol, tail) {
         (Some(name), _) => {
             let (s, e) =
-                crate::code::symbol_range(&text, name).ok_or_else(|| crate::code::missing_symbol(raw, name, &text))?;
+                crate::code::symbol_range(text, name).ok_or_else(|| crate::code::missing_symbol(raw, name, text))?;
             (s, e + 1)
         }
         (None, Some(n)) => (total.saturating_sub(n), total),
@@ -159,6 +165,45 @@ fn read_one(ctx: &mut Ctx, raw: &str, range: &LineRange, budget: usize) -> Resul
         out.push('\n');
     }
     Ok(out)
+}
+
+pub const EXCERPT: Builtin = Builtin {
+    spec: CommandSpec {
+        name: "excerpt",
+        summary: "lines of piped text, like read's from:/to:/tail:/symbol: but for any text",
+        params: &[
+            P::named("text", T::Str, "text to cut").required(),
+            P::named("from", T::Int, "first line (1-based)"),
+            P::named("to", T::Int, "last line (inclusive)"),
+            P::named("tail", T::Int, "only the last N lines"),
+            P::named("numbers", T::Bool, "prefix line numbers"),
+            P::named("symbol", T::Str, "just this function, type or class"),
+        ],
+        input: Some("text"),
+        returns: "string",
+        caps: &[],
+        examples: &[
+            "exec \"git show main:src/a.rs\" parse:\"text\" | excerpt symbol:\"parse\"",
+            "$log | excerpt tail:20",
+        ],
+    },
+    run: excerpt,
+};
+
+fn excerpt(_ctx: &mut Ctx, args: &mut Args) -> Result<Value> {
+    let range = LineRange {
+        from: args.opt_usize("from")?,
+        to: args.opt_usize("to")?,
+        tail: args.opt_usize("tail")?,
+        numbers: args.flag("numbers")?,
+        full: false,
+        symbol: args.opt_str("symbol")?,
+    };
+    let text = args.str("text")?;
+    if range.is_whole() {
+        return Ok(Value::Str(text));
+    }
+    slice_text("the text", &text, &range).map(Value::Str)
 }
 
 pub const WRITE: Builtin = Builtin {

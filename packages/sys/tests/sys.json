@@ -1,0 +1,16 @@
+[
+  {
+    "name": "sys.procs doesn't match agentsh itself",
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "sys.procs \"zz_no_such_process_zz\"",
+        "expect": {
+          "value": "no process matches `zz_no_such_process_zz`"
+        }
+      }
+    ]
+  }
+]

@@ -83,7 +83,8 @@ pub fn render_text(envelope: &Envelope) -> String {
 fn short_label(statement: &str) -> String {
     match statement.split_once(' ') {
         Some((line, rest)) if line.starts_with('[') => {
-            let command: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '$').collect();
+            let command: String =
+                rest.chars().take_while(|c| c.is_alphanumeric() || matches!(*c, '_' | '$' | '.')).collect();
             format!("{line} {command}")
         }
         _ => statement.to_string(),

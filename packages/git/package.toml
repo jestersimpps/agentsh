@@ -1,0 +1,217 @@
+name = "git"
+version = "0.1.0"
+summary = "read a git repo in tables: status with line counts, diffs, log, files and grep at any revision"
+caps = ["read", "exec"]
+detect = [".git"]
+
+[[command]]
+name = "status"
+summary = "branch line plus changed files with added/removed line counts (status + diff --numstat in one)"
+returns = "prints the branch; table of {xy, path, added, removed}, or \"clean\""
+examples = ["git.status", "git.status | where .xy == \"??\""]
+run = '''
+let lines = (exec "git" "status" "--porcelain=v1" "--branch" "--untracked-files=all" parse:"lines")
+let stats = []
+for $l in (exec "git" "diff" "HEAD" "--numstat" ok:[0, 128] parse:"lines") {
+  let m = match($l, "^(\S+)\t(\S+)\t(.*)$")
+  if $m != null { let stats = $stats + [$m] }
+}
+let rows = []
+for $l in $lines {
+  if $l =~ "^## " {
+    let b = match($l, "^## (.*)$")
+    print $b[1]
+  } else {
+    let m = match($l, "^(..) (?:.* -> )?(.*)$")
+    let added = null
+    let removed = null
+    for $s in $stats {
+      if $s[3] == $m[2] and $s[1] != "-" {
+        let added = int($s[1])
+        let removed = int($s[2])
+      }
+    }
+    let rows = $rows + [{xy: $m[1], path: $m[2], added: $added, removed: $removed}]
+  }
+}
+if len($rows) == 0 { "clean" } else { $rows }
+'''
+
+[[command]]
+name = "diff"
+summary = "the diff of the work tree (or staged, or against a revision); stat:true gives a table"
+params = [
+  { name = "paths", type = "paths", positional = true, variadic = true, doc = "limit to these files or folders" },
+  { name = "rev", type = "str", doc = "compare with this revision, e.g. main or HEAD~3; a..b and a...b work too" },
+  { name = "staged", type = "bool", doc = "only staged changes" },
+  { name = "stat", type = "bool", doc = "table of {path, added, removed} instead of the patch" },
+]
+returns = "patch text, or table with stat:true"
+examples = ["git.diff", "git.diff \"src/a.rs\" rev:\"main\"", "git.diff stat:true rev:\"main...HEAD\""]
+run = '''
+let argv = ["git", "diff", "--no-color", "--no-ext-diff"]
+if $staged { let argv = $argv + ["--cached"] }
+if $stat { let argv = $argv + ["--numstat"] }
+if $rev != null { let argv = $argv + [$rev] }
+let argv = $argv + ["--"]
+if $paths != null { let argv = $argv + $paths }
+let out = (exec $argv parse:"text")
+if $out == "" { "no changes" } else {
+  if $stat {
+    for $l in ($out | lines) {
+      let m = match($l, "^(\S+)\t(\S+)\t(.*)$")
+      {path: $m[3], added: $m[1], removed: $m[2]}
+    }
+  } else { $out }
+}
+'''
+
+[[command]]
+name = "log"
+summary = "recent commits as a table"
+params = [
+  { name = "path", type = "path", positional = true, doc = "only commits touching this path" },
+  { name = "n", type = "int", doc = "how many (default 10)" },
+  { name = "rev", type = "str", doc = "start here instead of HEAD, e.g. origin/main or main..HEAD" },
+  { name = "grep", type = "str", doc = "only commits whose message matches" },
+  { name = "authors", type = "bool", doc = "add an author column" },
+]
+returns = "table of {commit, when, subject} (plus author with authors:true)"
+examples = ["git.log", "git.log \"src/parser.rs\" n:5", "git.log rev:\"main..HEAD\""]
+run = '''
+let count = 10
+if $n != null { let count = $n }
+let argv = ["git", "log", "--no-color", "-n", str($count), "--format=%h%x09%ar%x09%an%x09%s"]
+if $grep != null { let argv = $argv + ["--grep", $grep] }
+if $rev != null { let argv = $argv + [$rev] }
+let argv = $argv + ["--"]
+if $path != null { let argv = $argv + [$path] }
+for $l in (exec $argv parse:"lines") {
+  let m = match($l, "^([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+  if $authors { {commit: $m[1], when: $m[2], author: $m[3], subject: $m[4]} } else { {commit: $m[1], when: $m[2], subject: $m[4]} }
+}
+'''
+
+[[command]]
+name = "show"
+summary = "a file as it is at a revision (with read's from/to/tail/symbol), or a commit's summary and files"
+params = [
+  { name = "rev", type = "str", positional = true, required = true, doc = "revision: origin/main, HEAD~1, a commit" },
+  { name = "path", type = "str", positional = true, doc = "file, relative to the repo root; omit for the commit itself" },
+  { name = "from", type = "int", doc = "first line" },
+  { name = "to", type = "int", doc = "last line" },
+  { name = "tail", type = "int", doc = "last N lines" },
+  { name = "numbers", type = "bool", doc = "prefix line numbers" },
+  { name = "symbol", type = "str", doc = "just this function, type or class" },
+  { name = "patch", type = "bool", doc = "for a commit: include the full patch" },
+]
+returns = "file text; or prints the commit line and returns a table of {path, added, removed}"
+examples = ["git.show \"origin/main\" \"src/lib.rs\" symbol:\"parse\"", "git.show \"HEAD~1\"", "git.show \"a1b2c3\" patch:true"]
+run = '''
+if $path != null {
+  exec "git" "show" "$rev:$path" parse:"text" | excerpt from:$from to:$to tail:$tail numbers:$numbers symbol:$symbol
+} else {
+  if $patch {
+    exec "git" "show" "--no-color" "--format=%h %an, %ar: %s%n%n%b" $rev parse:"text"
+  } else {
+    let head = (exec "git" "log" "-1" "--format=%h %an, %ar: %s" $rev parse:"text")
+    print trim($head)
+    for $l in (exec "git" "show" "--no-color" "--numstat" "--format=" $rev parse:"lines") {
+      let m = match($l, "^(\S+)\t(\S+)\t(.*)$")
+      {path: $m[3], added: $m[1], removed: $m[2]}
+    }
+  }
+}
+'''
+
+[[command]]
+name = "grep"
+summary = "search tracked files, at the work tree or at a revision, as a table"
+params = [
+  { name = "pattern", type = "str", positional = true, required = true, doc = "extended regex" },
+  { name = "rev", type = "str", doc = "search this revision instead of the work tree, e.g. origin/main" },
+  { name = "in", type = "paths", doc = "limit to these files or folders" },
+  { name = "case", type = "bool", doc = "case-sensitive (default: ignore case)" },
+]
+returns = "table of {path, line, text}"
+examples = ["git.grep \"fn parse\"", "git.grep \"TODO\" rev:\"origin/main\" in:\"src\""]
+run = '''
+let argv = ["git", "grep", "-n", "-I", "-E", "--no-color"]
+if not $case { let argv = $argv + ["-i"] }
+let argv = $argv + ["-e", $pattern]
+if $rev != null { let argv = $argv + [$rev] }
+let argv = $argv + ["--"]
+if $in != null { let argv = $argv + $in }
+let re = "^([^:]+):(\d+):(.*)$"
+if $rev != null { let re = "^[^:]*:([^:]+):(\d+):(.*)$" }
+for $l in (exec $argv ok:[0, 1] parse:"lines") {
+  let m = match($l, $re)
+  {path: $m[1], line: int($m[2]), text: trim($m[3])}
+}
+'''
+
+[[command]]
+name = "files"
+summary = "tracked files at a revision (default HEAD), optionally under a folder or matching a regex"
+params = [
+  { name = "path", type = "str", positional = true, doc = "folder, relative to the repo root" },
+  { name = "rev", type = "str", doc = "revision (default HEAD)" },
+  { name = "match", type = "str", doc = "only paths matching this regex" },
+]
+returns = "list of paths"
+examples = ["git.files \"src\" rev:\"origin/main\"", "git.files match:\"\\\\.test\\\\.ts$\""]
+run = '''
+let at = "HEAD"
+if $rev != null { let at = $rev }
+let argv = ["git", "ls-tree", "-r", "--name-only", $at]
+if $path != null { let argv = $argv + ["--", $path] }
+let files = (exec $argv parse:"lines")
+if $match == null { $files } else {
+  let kept = []
+  for $f in $files { if $f =~ $match { let kept = $kept + [$f] } }
+  $kept
+}
+'''
+
+[[command]]
+name = "branches"
+summary = "local branches, newest first, with upstream tracking and last commit"
+params = [{ name = "n", type = "int", doc = "how many (default 15)" }]
+returns = "table of {current, branch, upstream, track, when, subject}"
+examples = ["git.branches", "git.branches | where .track =~ \"behind\""]
+run = '''
+let count = 15
+if $n != null { let count = $n }
+let fmt = "--format=%(HEAD)%09%(refname:short)%09%(upstream:short)%09%(upstream:track)%09%(committerdate:relative)%09%(contents:subject)"
+for $l in (exec "git" "for-each-ref" "--sort=-committerdate" "--count" str($count) $fmt "refs/heads" parse:"lines") {
+  let m = match($l, "^(.)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+  {current: $m[1] == "*", branch: $m[2], upstream: $m[3], track: $m[4], when: $m[5], subject: $m[6]}
+}
+'''
+
+[[command]]
+name = "changed"
+summary = "what this branch changes: files that differ from the merge base with base (default main)"
+params = [{ name = "base", type = "str", positional = true, doc = "base branch (default main)" }]
+returns = "prints the range; table of {status, path, added, removed}"
+examples = ["git.changed", "git.changed \"origin/main\""]
+run = '''
+let b = "main"
+if $base != null { let b = $base }
+let range = "$b...HEAD"
+let stats = (exec "git" "diff" "--no-color" "--numstat" $range parse:"lines")
+let rows = []
+for $l in (exec "git" "diff" "--no-color" "--name-status" $range parse:"lines") {
+  let m = match($l, "^(\S)\S*\t(?:[^\t]*\t)?(.*)$")
+  let added = null
+  let removed = null
+  for $s in $stats {
+    let n = match($s, "^(\S+)\t(\S+)\t(.*)$")
+    if $n[3] == $m[2] { let added = $n[1]
+      let removed = $n[2] }
+  }
+  let rows = $rows + [{status: $m[1], path: $m[2], added: $added, removed: $removed}]
+}
+print "${len($rows)} files changed in $range"
+$rows
+'''
