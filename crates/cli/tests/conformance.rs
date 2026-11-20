@@ -8,24 +8,33 @@ struct Case {
     body: Value,
 }
 
-fn spec_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/tests")
+fn repo_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+fn json_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect()
+}
+
+/// `spec/tests/*.json`, then every package's `packages/<name>/tests/*.json`.
 fn load_cases() -> Vec<Case> {
-    let mut files: Vec<PathBuf> = std::fs::read_dir(spec_dir())
-        .expect("spec/tests exists")
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e == "json"))
-        .collect();
+    let repo = repo_dir();
+    let mut files = json_files(&repo.join("spec/tests"));
+    assert!(!files.is_empty(), "spec/tests has no cases");
+    let mut packages: Vec<PathBuf> =
+        std::fs::read_dir(repo.join("packages")).expect("packages/ exists").flatten().map(|e| e.path()).collect();
+    packages.sort();
+    for package in packages {
+        files.extend(json_files(&package.join("tests")));
+    }
     files.sort();
     files
         .into_iter()
         .flat_map(|path| {
             let text = std::fs::read_to_string(&path).unwrap();
             let cases: Vec<Value> = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-            let file = path.file_name().unwrap().to_string_lossy().into_owned();
+            let file = path.strip_prefix(repo_dir()).unwrap_or(&path).to_string_lossy().into_owned();
             cases.into_iter().map(move |body| Case {
                 file: file.clone(),
                 name: body["name"].as_str().unwrap_or("unnamed").to_string(),
@@ -178,4 +187,22 @@ fn conformance() {
     }
     assert!(failures.is_empty(), "{} of {} cases failed:\n\n{}", failures.len(), cases.len(), failures.join("\n\n"));
     eprintln!("{} conformance cases passed", cases.len());
+}
+
+/// The packages in docs/examples are the tutorial's; keep them passing with `agentsh pkg test`.
+#[test]
+fn example_packages() {
+    let examples = repo_dir().join("docs/examples");
+    for entry in std::fs::read_dir(&examples).expect("docs/examples exists").flatten() {
+        let home = tempfile::tempdir().unwrap();
+        let out = Command::new(env!("CARGO_BIN_EXE_agentsh"))
+            .env("AGENTSH_HOME", home.path())
+            .env_remove("AGENTSH_PACKAGES")
+            .args(["pkg", "test"])
+            .arg(entry.path())
+            .output()
+            .expect("agentsh runs");
+        let text = String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{}:\n{text}", entry.path().display());
+    }
 }

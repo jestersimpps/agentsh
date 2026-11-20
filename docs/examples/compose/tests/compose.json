@@ -1,0 +1,53 @@
+[
+  {
+    "name": "compose.services turns docker compose ps into a table",
+    "files": {
+      "ps.jsonl": "{\"Service\":\"db\",\"State\":\"running\",\"Health\":\"healthy\",\"Ports\":\"0.0.0.0:5432->5432/tcp\"}\n{\"Service\":\"web\",\"State\":\"exited\",\"Health\":\"\",\"Ports\":\"\"}\n",
+      "empty.txt": ""
+    },
+    "steps": [
+      {
+        "run": "read \"ps.jsonl\" | compose.services",
+        "expect": {
+          "value": [
+            {
+              "service": "db",
+              "state": "running",
+              "health": "healthy",
+              "ports": "0.0.0.0:5432->5432/tcp"
+            },
+            {
+              "service": "web",
+              "state": "exited",
+              "health": "",
+              "ports": ""
+            }
+          ]
+        }
+      },
+      {
+        "run": "read \"ps.jsonl\" | compose.services | where .state != \"running\" | pick .service",
+        "expect": {
+          "value": [
+            {
+              "service": "web"
+            }
+          ]
+        }
+      },
+      {
+        "run": "read \"empty.txt\" | compose.services",
+        "expect": {
+          "error.code": "expectation_failed",
+          "error.hint~": "docker compose up"
+        }
+      },
+      {
+        "run": "compose.services",
+        "expect": {
+          "error.code": "capability_denied"
+        }
+      }
+    ]
+  }
+]

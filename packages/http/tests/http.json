@@ -1,0 +1,29 @@
+[
+  {
+    "name": "http.get parses JSON from a local server",
+    "allow": [
+      "exec",
+      "net"
+    ],
+    "files": {
+      "api/health.json": "{\"ok\": true, \"items\": [{\"id\": 1}, {\"id\": 2}]}"
+    },
+    "steps": [
+      {
+        "run": "start \"python3 -m http.server 18765 --bind 127.0.0.1 --directory api\" name:\"api\" until:\"Serving\" env:{PYTHONUNBUFFERED: \"1\"}\nhttp.get \"http://127.0.0.1:18765/health.json\" | pick .items\nstop \"api\"",
+        "expect": {
+          "ok": true,
+          "outputs.1.value.items": [
+            {
+              "id": 1
+            },
+            {
+              "id": 2
+            }
+          ],
+          "printed~": "200 application/json"
+        }
+      }
+    ]
+  }
+]

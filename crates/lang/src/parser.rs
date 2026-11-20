@@ -240,6 +240,7 @@ impl Parser {
     fn pipeline(&mut self) -> Result<Pipeline, ParseError> {
         let head = match self.peek() {
             Tok::Ident(name) if !KEYWORDS.contains(&name.as_str()) => Stage::Call(self.call()?),
+            Tok::Bare(word) if is_qualified(word) => Stage::Call(self.call()?),
             _ => {
                 let span = self.span();
                 Stage::Expr(self.expr()?, span)
@@ -251,6 +252,7 @@ impl Parser {
             self.skip_newlines();
             match self.peek() {
                 Tok::Ident(name) if !KEYWORDS.contains(&name.as_str()) => rest.push(self.call()?),
+                Tok::Bare(word) if is_qualified(word) => rest.push(self.call()?),
                 Tok::Ident(word) if KEYWORDS.contains(&word.as_str()) => {
                     return Err(self.unexpected("a command after `|`").with_hint(format!(
                         "`{word}` can't follow a pipe; store the value first: let rows = (...) then {word} ... over $rows"
@@ -271,8 +273,10 @@ impl Parser {
 
     fn call(&mut self) -> Result<Call, ParseError> {
         let span = self.span();
-        let Tok::Ident(name) = self.bump() else {
-            return Err(ParseError::new("expected a command name", span));
+        let name = match self.bump() {
+            Tok::Ident(name) => name,
+            Tok::Bare(word) if is_qualified(&word) => word,
+            _ => return Err(ParseError::new("expected a command name", span)),
         };
         let mut args = Vec::new();
         let saved = std::mem::replace(&mut self.in_args, true);
@@ -581,6 +585,16 @@ fn implicit_var(src: &str) -> String {
     if starts_with_ident && !is_call && !is_keyword { format!("${trimmed}") } else { src.to_string() }
 }
 
+/// A package command name: `package.command`, both plain identifiers.
+fn is_qualified(word: &str) -> bool {
+    let ident = |s: &str| {
+        let mut chars = s.chars();
+        chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    };
+    matches!(word.split_once('.'), Some((package, command)) if ident(package) && ident(command))
+}
+
 fn bare_word_error(word: &str, span: Span) -> ParseError {
     let err = ParseError::new(format!("unquoted word `{word}`"), span);
     if word.starts_with('-') {
@@ -613,6 +627,16 @@ mod tests {
         let src = "let n = 0\nfor $f in glob(\"*.rs\") {\n  if $f =~ \"main\" { print $f } else { print \"no\" }\n}\ntry { rm \"x\" } catch $e { print $e.code }";
         let program = parse(src).unwrap();
         assert_eq!(program.stmts.len(), 3);
+    }
+
+    #[test]
+    fn package_commands_are_qualified_names() {
+        let program = parse("js.scripts | where .name == \"test\" | demo.pick_one").unwrap();
+        let Stmt::Pipeline(p) = &program.stmts[0] else { panic!() };
+        let Stage::Call(head) = &p.head else { panic!() };
+        assert_eq!(head.name, "js.scripts");
+        assert_eq!(p.rest[1].name, "demo.pick_one");
+        assert!(parse("read main.rs").is_err(), "a dotted word in argument position still needs quotes");
     }
 
     #[test]

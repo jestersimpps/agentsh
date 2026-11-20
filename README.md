@@ -44,6 +44,18 @@ Tool execution time is only the time the commands themselves run; it excludes th
 
 Where the savings come from: fewer round trips (pipelines, several statements per call, `grep ... after:N`, edit-and-test in one run, read-only typo correction), reading only what's needed (`read … symbol:`, `outline`, `refs`, `map`), not re-sending what the agent already has (unchanged files become a one-line note, changed files a diff, repeated results a note), and compact output (tab tables, relative times, constant columns printed once, failure digests, short edit confirmations).
 
+### Packages
+
+`bench/packages_bench.py` covers the commands that ~800 real agent sessions ran most (mined with `bench/mine_sessions.py`): git, gh, tsc, lsof/ps, curl + jq, pdftotext and unzip, each written with the flags those sessions used ([results](bench/packages_results.md)):
+
+| | bash | agentsh (text) |
+|---|---|---|
+| tool calls | 19 | **17** |
+| tokens in + out | 10,929 | **7,173** (−34%) |
+| tokens including the one-time briefings | 10,929 | **8,644** (−21%) |
+
+The biggest wins come from structured views of noisy output: `gh.checks` (617 → 17 tokens), `gh.pr` (409 → 96), `sys.ports` (1,018 → 320), `http.get` + `where`/`pick` instead of `curl | jq` (458 → 164) and `docs.zip` (398 → 106). Short outputs like `git log --oneline` gain nothing, and a three-command branch review costs 13% more tokens in one call than in three, though it saves two turns.
+
 ### A full coding session
 
 `bench/session_sim.py` runs a whole task in both shells against fresh copies of this repo: explore, add a `reverse` command with a realistic compile error, fix it, add a conformance case, run the suite, review. Both must end with all tests passing. Each turn the model re-reads the conversation so far ([full cheat sheet](bench/session_results.md), [brief cheat sheet](bench/session_results_brief.md)):
@@ -67,9 +79,10 @@ cargo install --path crates/cli
 Give the agent a cheat sheet and the binary:
 
 ```sh
-agentsh help            # full cheat sheet, ~1,070 tokens
-agentsh help brief      # syntax + the everyday commands, ~490 tokens
+agentsh help            # full cheat sheet, ~1,180 tokens
+agentsh help brief      # syntax + the everyday commands, ~540 tokens
 agentsh help edit       # one command in detail
+agentsh help js         # one package's briefing
 ```
 
 Put the cheat sheet in the system prompt. It contains nothing machine- or time-specific, so it stays byte-identical across sessions and is served from the prompt cache.
@@ -91,6 +104,25 @@ Every top-level statement's result is shown, so independent questions fit in one
 Output is compact text by default (raw file contents, tables with one header row, `error <code>:` lines with hints). `--format json` (or `AGENTSH_FORMAT=json`) prints the full JSON envelope for programs.
 
 Session commands: `agentsh undo [u_N]`, `changes`, `commit`, `discard`, `checkpoint NAME`, `rollback NAME`. Sessions (`--session ID`) keep the current folder, variables, result handles and the undo journal between calls. Give each agent conversation its own session id: in a named session, re-reading an unchanged file returns a one-line note, re-reading a changed file returns a diff against the version the agent saw, an identical repeated result returns a note (the value stays in `$_`), and generic hints are shown once.
+
+## Packages
+
+The core is files, text, data, `exec` and jobs. Everything specific to an ecosystem comes in a package: commands named `package.command`, `check` tasks (test, build, lint) and a short briefing. The built-in packages live in [`packages/`](packages): `code`, `rust`, `js`, `go`, `swift`, `python`, `git`, `gh`, `http`, `sys` and `docs`.
+
+Packages don't cost context up front. The cheat sheet only says they exist. `env` lists the ones that apply to the project, `help "js"` returns a package's briefing when the model needs it, and an unknown command's hint names the package that has it.
+
+```sh
+agentsh pkg ls                                         # every package, whether it's on, where it came from
+agentsh pkg add ./my-package                           # install from a folder
+agentsh pkg add https://github.com/you/repo --path pkg # or from git (public or private, --rev to pin)
+agentsh pkg update                                     # re-fetch installed packages
+agentsh pkg rm my-package
+agentsh pkg new my-package && agentsh pkg test my-package  # write your own
+```
+
+To share a package with a team without installing it anywhere, commit it in the repo and list it in `.agentsh.toml` under `[packages] paths`. Private git repos work through your usual SSH key or credential helper. **[Writing and sharing packages](docs/writing-packages.md)** is the step-by-step guide.
+
+A package is a `package.toml`, an optional `brief.md` and tests. Its commands are agentsh programs, so they get undo, rollback, the sandbox and redaction for free. Each package declares the capabilities it may use, and it never gets more than the session has. Only a human can install or turn on a package. See [the guide](docs/writing-packages.md) to write one, [spec/packages.md](spec/packages.md) for the format and [packages/README.md](packages/README.md) to contribute one to the repo.
 
 ## The JSON envelope
 
@@ -142,6 +174,10 @@ dotenv = ".env"
 redact_env = ["*_KEY", "*_TOKEN", "*_SECRET", "*PASSWORD*"]
 [secrets.commands]
 GITHUB_TOKEN = "gh auth token"
+
+[packages]
+disable = ["swift"]        # turn packages off (or on, with enable = [...])
+paths = ["tools/my-pkg"]   # load packages from folders
 ```
 
 ## Traces
@@ -155,6 +191,6 @@ cargo test                 # unit tests, property tests for undo, and the confor
 cargo clippy --all-targets
 ```
 
-The conformance suite (`spec/tests/*.json`) runs the real binary against fixtures and checks envelopes and resulting files. It passes on macOS and Linux.
+The conformance suite (`spec/tests/*.json` and `packages/*/tests/*.json`) runs the real binary against fixtures and checks envelopes and resulting files. It passes on macOS and Linux.
 
-Crates: `spec` (envelope and value types), `lang` (lexer, parser), `platform` (config, sandbox, process, secrets), `core` (interpreter, sessions, journal, limits), `builtins` (commands), `cli`.
+Crates: `spec` (envelope and value types), `lang` (lexer, parser), `platform` (config, sandbox, process, secrets), `core` (interpreter, sessions, journal, limits, package loading), `builtins` (commands, embedded packages), `cli`. Packages: `packages/`.

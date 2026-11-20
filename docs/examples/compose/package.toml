@@ -1,0 +1,32 @@
+name = "compose"
+version = "0.1.0"
+summary = "Docker Compose: service status as a table"
+caps = ["read", "exec"]
+detect = ["compose.yaml", "compose.yml", "docker-compose.yml"]
+
+[[command]]
+name = "services"
+summary = "each service's state, health and ports"
+params = [
+  { name = "all", type = "bool", doc = "include stopped services" },
+  { name = "output", type = "str", doc = "`docker compose ps --format json` output to parse instead of running it" },
+]
+input = "output"
+returns = "table of {service, state, health, ports}"
+caps = ["read"]
+examples = ["compose.services", "compose.services | where .state != \"running\""]
+run = '''
+let text = $output
+if $text == null {
+  let argv = ["docker", "compose", "ps", "--format", "json"]
+  if $all { let argv = $argv + ["--all"] }
+  let text = (exec $argv parse:"text")
+}
+let rows = []
+for $line in ($text | lines) {
+  let s = ($line | json)
+  let rows = $rows + [{service: $s.Service, state: $s.State, health: get($s, "Health", ""), ports: get($s, "Ports", "")}]
+}
+if len($rows) == 0 { fail "no services are running" hint:"start them with: exec \"docker compose up -d\"" }
+$rows
+'''

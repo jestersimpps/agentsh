@@ -1,0 +1,18 @@
+name = "rust"
+version = "0.1.0"
+summary = "Cargo projects: cargo test failure digests, clippy as lint"
+caps = ["read", "exec"]
+detect = ["Cargo.toml"]
+
+[check]
+parser = "cargo"
+recognize = ["cargo test*", "cargo nextest*"]
+
+[check.test]
+cmd = ["cargo", "test", "-q"]
+
+[check.build]
+cmd = ["cargo", "build", "-q"]
+
+[check.lint]
+cmd = ["cargo", "clippy", "-q", "--all-targets"]

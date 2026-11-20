@@ -37,7 +37,7 @@ enum Kind {
 }
 
 impl Shell {
-    pub fn open(options: ShellOptions, registry: Registry) -> std::result::Result<Shell, String> {
+    pub fn open(options: ShellOptions, mut registry: Registry) -> std::result::Result<Shell, String> {
         let start_dir =
             options.start_dir.canonicalize().map_err(|e| format!("can't open {}: {e}", options.start_dir.display()))?;
         let root = match options.root {
@@ -45,6 +45,7 @@ impl Shell {
             None => find_project_root(&start_dir),
         };
         let config = Config::load(&root, &options.overrides)?;
+        registry.activate(&config)?;
         let extra_roots = config.extra_roots.iter().filter_map(|p| p.canonicalize().ok()).collect();
         let sandbox = sandbox_for(config.sandbox)?;
         let secrets = Secrets::new(&config);
@@ -191,7 +192,10 @@ impl Shell {
             started_jobs: Vec::new(),
             unshortened: false,
             regex_cache: HashMap::new(),
+            cap_ceiling: None,
+            script_depth: 0,
         };
+        ctx.warnings.extend(self.registry.warnings().iter().cloned());
         let journal_mark = ctx.journal.len();
         let result = action(&mut ctx);
         let mut envelope = Envelope::default();

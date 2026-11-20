@@ -55,6 +55,9 @@ pub struct Config {
     pub dotenv: Option<PathBuf>,
     pub redact_env: Vec<String>,
     pub secret_commands: BTreeMap<String, String>,
+    pub package_enable: Vec<String>,
+    pub package_disable: Vec<String>,
+    pub package_paths: Vec<PathBuf>,
     pub sources: Vec<PathBuf>,
 }
 
@@ -81,6 +84,9 @@ impl Default for Config {
             dotenv: None,
             redact_env: DEFAULT_REDACT_ENV.iter().map(|s| s.to_string()).collect(),
             secret_commands: BTreeMap::new(),
+            package_enable: Vec::new(),
+            package_disable: Vec::new(),
+            package_paths: Vec::new(),
             sources: Vec::new(),
         }
     }
@@ -148,6 +154,19 @@ impl Config {
             self.redact_env = patterns;
         }
         self.secret_commands.extend(layer.secrets.commands);
+        for name in layer.packages.enable {
+            self.package_disable.retain(|n| *n != name);
+            if !self.package_enable.contains(&name) {
+                self.package_enable.push(name);
+            }
+        }
+        for name in layer.packages.disable {
+            self.package_enable.retain(|n| *n != name);
+            if !self.package_disable.contains(&name) {
+                self.package_disable.push(name);
+            }
+        }
+        self.package_paths.extend(layer.packages.paths.into_iter().map(resolve));
     }
 
     fn apply_env(&mut self, root: &Path) -> Result<(), String> {
@@ -161,6 +180,11 @@ impl Config {
         }
         if let Ok(backend) = std::env::var("AGENTSH_SANDBOX") {
             self.sandbox = backend.parse()?;
+        }
+        if let Some(paths) = std::env::var_os("AGENTSH_PACKAGES") {
+            self.package_paths.extend(
+                std::env::split_paths(&paths).filter(|p| !p.as_os_str().is_empty()).map(|p| resolve_path(&p, root)),
+            );
         }
         if let Ok(trace) = std::env::var("AGENTSH_TRACE") {
             self.trace_path = Some(resolve_path(Path::new(&trace), root));

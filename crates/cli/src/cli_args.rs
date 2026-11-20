@@ -88,6 +88,11 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
+    #[command(about = "list, install or remove packages (a human's tool; agents can't run it)")]
+    Pkg {
+        #[command(subcommand)]
+        action: PkgAction,
+    },
     #[command(about = "print the JSON Schema of the envelope")]
     Schema,
     #[command(about = "summarize a trace: failures, costly calls, failed-then-fixed pairs")]
@@ -104,5 +109,37 @@ pub enum Command {
         policy: String,
         #[arg(last = true)]
         argv: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PkgAction {
+    #[command(about = "list every package: built-in, configured and installed (with where it came from)")]
+    Ls,
+    #[command(about = "install a package from a folder or a git URL (private repos use your git credentials)")]
+    Add {
+        #[arg(help = "package folder, or a git URL (https://, git@, ssh://, file://, *.git)")]
+        source: String,
+        #[arg(long, value_name = "DIR", help = "subfolder that holds package.toml, e.g. packages/net")]
+        path: Option<PathBuf>,
+        #[arg(long, value_name = "REF", help = "git branch or tag to install (default: the default branch)")]
+        rev: Option<String>,
+        #[arg(long, help = "replace an installed package with the same name")]
+        force: bool,
+    },
+    #[command(about = "reinstall installed packages from where they came from (all, or the ones named)")]
+    Update { names: Vec<String> },
+    #[command(about = "remove an installed package")]
+    Rm { name: String },
+    #[command(about = "create a new package folder with an example command and a test")]
+    New {
+        name: String,
+        #[arg(long, value_name = "DIR", help = "parent folder (default: current folder)")]
+        dir: Option<PathBuf>,
+    },
+    #[command(about = "check a package folder and run its tests/*.json")]
+    Test {
+        #[arg(default_value = ".")]
+        dir: PathBuf,
     },
 }

@@ -1,5 +1,7 @@
 use crate::args::ArgVal;
-use crate::registry::{Builtin, CommandSpec, ParamSpec, ParamType};
+use crate::package::MAX_SCRIPT_DEPTH;
+use crate::package::Package;
+use crate::registry::{Command, CommandSpec, ParamSpec, ParamType, Runner};
 use crate::suggest::{bash_equivalent, closest};
 use crate::{Args, Ctx, Result, ShellError};
 use agentsh_lang::{Accessor, Arg, BinOp, Call, Expr, InterpPart, Pipeline, Program, Stage, Stmt, UnOp};
@@ -120,19 +122,49 @@ impl Ctx<'_> {
     }
 
     fn run_call(&mut self, call: &Call, input: Option<Value>) -> Result<Value> {
-        let builtin = *self
+        let command = *self
             .registry
             .get(&call.name)
             .ok_or_else(|| self.unknown_command(call).with_command_if_missing(&call.name, call.span))?;
-        self.call_builtin(builtin, call, input).map_err(|e| e.with_command_if_missing(&call.name, call.span))
+        self.call_command(command, call, input).map_err(|e| e.with_command_if_missing(&call.name, call.span))
     }
 
-    fn call_builtin(&mut self, builtin: Builtin, call: &Call, input: Option<Value>) -> Result<Value> {
-        for cap in builtin.spec.caps {
+    fn call_command(&mut self, command: Command, call: &Call, input: Option<Value>) -> Result<Value> {
+        for cap in command.spec.caps {
             self.require(*cap)?;
         }
-        let mut args = self.bind(&builtin.spec, call, input)?;
-        (builtin.run)(self, &mut args)
+        let mut args = self.bind(&command.spec, call, input)?;
+        match command.runner {
+            Runner::Native(run) => run(self, &mut args),
+            Runner::Script(program) => self.run_script(&command, program, &mut args),
+        }
+    }
+
+    /// Run a package command: its params become `$name` variables in a fresh scope, and every
+    /// capability check is limited to what its package declared.
+    fn run_script(&mut self, command: &Command, program: &Program, args: &mut Args) -> Result<Value> {
+        if self.script_depth >= MAX_SCRIPT_DEPTH {
+            return Err(ShellError::new(
+                ErrorCode::InvalidValue,
+                format!("package commands nested more than {MAX_SCRIPT_DEPTH} deep"),
+            )
+            .with_hint(format!(
+                "`{}` probably calls itself; fix the package `{}`",
+                command.spec.name, command.package
+            )));
+        }
+        let mut scope = indexmap::IndexMap::new();
+        for param in command.spec.params {
+            scope.insert(param.name.to_string(), args.take(param.name).unwrap_or(Value::Null));
+        }
+        let saved_vars = std::mem::replace(&mut self.state.vars, scope);
+        let saved_ceiling = self.cap_ceiling.replace((command.package, command.ceiling));
+        self.script_depth += 1;
+        let result = self.run_program(program);
+        self.script_depth -= 1;
+        self.cap_ceiling = saved_ceiling;
+        self.state.vars = saved_vars;
+        result
     }
 
     fn unknown_command(&self, call: &Call) -> ShellError {
@@ -140,6 +172,9 @@ impl Ctx<'_> {
         let err = ShellError::new(ErrorCode::UnknownCommand, format!("unknown command `{name}`")).with_value(name);
         if let Some(equivalent) = bash_equivalent(name) {
             return err.with_hint(format!("this isn't bash; use: {equivalent}"));
+        }
+        if let Some(hint) = self.package_hint(name) {
+            return err.with_hint(hint);
         }
         if let Some(best) = closest(name, self.registry.names()) {
             return err.with_hint(format!("did you mean `{best}`?"));
@@ -152,6 +187,57 @@ impl Ctx<'_> {
             });
         }
         err.with_hint("run `help` to list commands")
+    }
+
+    /// Hints for names that belong to a package: turned off, misspelled, or missing the prefix.
+    fn package_hint(&self, name: &str) -> Option<String> {
+        const ENABLE: &str = "a human can turn it on with [packages] enable = [\"<p>\"] in .agentsh.toml";
+        if let Some(owner) = self.registry.turned_off_owner(name) {
+            return Some(format!(
+                "`{name}` is in package `{owner}`, which is turned off; {}",
+                ENABLE.replace("<p>", owner)
+            ));
+        }
+        if let Some((prefix, rest)) = name.split_once('.') {
+            return Some(match self.registry.package(prefix) {
+                Some(p) if !p.enabled => format!("package `{prefix}` is turned off; {}", ENABLE.replace("<p>", prefix)),
+                Some(p) => {
+                    let names: Vec<&str> = p.commands.iter().map(|c| c.spec.name).collect();
+                    match closest(name, names.iter().copied()) {
+                        Some(best) => format!("did you mean `{best}`?"),
+                        None if names.is_empty() => {
+                            format!("package `{prefix}` has no commands; help \"{prefix}\" shows what it adds")
+                        }
+                        None => format!("`{prefix}` has: {}", names.join(" ")),
+                    }
+                }
+                None => match closest(prefix, self.registry.packages().iter().map(|p| p.name.as_str())) {
+                    Some(best) => format!("no package `{prefix}`; did you mean `{best}.{rest}`?"),
+                    None => "no package by that name; help \"packages\" lists them".into(),
+                },
+            });
+        }
+        let suffix = format!(".{name}");
+        let owners: Vec<&Package> = self
+            .registry
+            .packages()
+            .iter()
+            .filter(|p| p.commands.iter().any(|c| c.spec.name.ends_with(&suffix)))
+            .collect();
+        match owners.as_slice() {
+            [] => None,
+            [p] if p.enabled => Some(format!("package commands take their package's name: {}{suffix}", p.name)),
+            [p] => Some(format!(
+                "`{}{suffix}` is in package `{}`, which is turned off; {}",
+                p.name,
+                p.name,
+                ENABLE.replace("<p>", &p.name)
+            )),
+            many => {
+                let names: Vec<String> = many.iter().map(|p| format!("{}{suffix}", p.name)).collect();
+                Some(format!("several packages have it: {}", names.join(", ")))
+            }
+        }
     }
 
     fn bind(&mut self, spec: &CommandSpec, call: &Call, input: Option<Value>) -> Result<Args> {
@@ -190,8 +276,9 @@ impl Ctx<'_> {
                 }
                 continue;
             }
-            let val = self.bind_one(param, expr)?;
-            args.insert(param.name, val);
+            if let Some(val) = self.bind_one(param, expr)? {
+                args.insert(param.name, val);
+            }
         }
         for (param, exprs) in variadic {
             let val = self.bind_variadic(param, &exprs)?;
@@ -213,12 +300,17 @@ impl Ctx<'_> {
         Ok(args)
     }
 
-    fn bind_one(&mut self, param: &ParamSpec, expr: &Expr) -> Result<ArgVal> {
+    /// Binds one argument. `null` for a typed parameter means "not passed", so package commands
+    /// can forward optional arguments (`read $file from:$from`) without branching.
+    fn bind_one(&mut self, param: &ParamSpec, expr: &Expr) -> Result<Option<ArgVal>> {
         if param.ty == ParamType::Expr {
-            return Ok(ArgVal::Lazy(bare_to_field(expr)));
+            return Ok(Some(ArgVal::Lazy(bare_to_field(expr))));
         }
         let value = self.eval(expr, None)?;
-        coerce(param, value).map(ArgVal::Value)
+        if value == Value::Null && param.ty != ParamType::Any {
+            return Ok(None);
+        }
+        coerce(param, value).map(|v| Some(ArgVal::Value(v)))
     }
 
     fn bind_variadic(&mut self, param: &ParamSpec, exprs: &[&Expr]) -> Result<ArgVal> {
@@ -227,7 +319,11 @@ impl Ctx<'_> {
         }
         let mut items = Vec::new();
         for expr in exprs {
-            match coerce(param, self.eval(expr, None)?)? {
+            let value = self.eval(expr, None)?;
+            if value == Value::Null && param.ty != ParamType::Any {
+                continue;
+            }
+            match coerce(param, value)? {
                 Value::List(list) => items.extend(list),
                 single => items.push(single),
             }

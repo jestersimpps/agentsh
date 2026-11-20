@@ -1,0 +1,379 @@
+[
+  {
+    "name": "env lists the packages detected for this project",
+    "files": {
+      "package.json": "{\"name\": \"x\"}",
+      "Cargo.toml": "[package]\nname = \"x\"\n"
+    },
+    "steps": [
+      {
+        "run": "env",
+        "expect": {
+          "ok": true,
+          "value.packages": [
+            "rust",
+            "js"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "help lists packages with their status and briefs one",
+    "files": {
+      "go.mod": "module x\n"
+    },
+    "steps": [
+      {
+        "run": "help \"packages\"",
+        "expect": {
+          "value.0.package": "code",
+          "value.0.status": "on",
+          "value.3.package": "go",
+          "value.3.status": "on, detected"
+        }
+      },
+      {
+        "run": "help \"rust\"",
+        "expect": {
+          "value~": "cargo test -q"
+        }
+      },
+      {
+        "run": "help \"rsut\"",
+        "expect": {
+          "ok": false,
+          "error.hint": "did you mean \"rust\"?"
+        }
+      }
+    ]
+  },
+  {
+    "name": "the cheat sheet names packages but lists no package commands",
+    "steps": [
+      {
+        "cli": [
+          "help"
+        ],
+        "expect_text~": "help \"packages\" lists them all"
+      },
+      {
+        "run": "help \"compact\"",
+        "expect": {
+          "value~": "PACKAGES"
+        }
+      }
+    ]
+  },
+  {
+    "name": "a package command without its prefix gets a hint",
+    "files": {
+      "package.json": "{}"
+    },
+    "steps": [
+      {
+        "run": "scripts",
+        "expect": {
+          "error.code": "unknown_command",
+          "error.hint": "package commands take their package's name: js.scripts"
+        }
+      }
+    ]
+  },
+  {
+    "name": "a turned-off package's commands are gone, with a hint naming the package",
+    "config": "[packages]\ndisable = [\"code\", \"js\"]\n",
+    "steps": [
+      {
+        "run": "map",
+        "expect": {
+          "error.code": "unknown_command",
+          "error.hint~": "package `code`, which is turned off"
+        }
+      },
+      {
+        "run": "js.scripts",
+        "expect": {
+          "error.hint~": "package `js` is turned off"
+        }
+      },
+      {
+        "run": "help \"packages\"",
+        "expect": {
+          "value.0.status": "off"
+        }
+      }
+    ]
+  },
+  {
+    "name": "an unknown package in [packages] is a setup error",
+    "config": "[packages]\nenable = [\"nope\"]\n",
+    "steps": [
+      {
+        "run": "env",
+        "expect": {
+          "ok": false,
+          "error.message": "[packages] names `nope`, but no package has that name"
+        }
+      }
+    ]
+  },
+  {
+    "name": "a package with a built-in package's name is skipped with a warning",
+    "config": "[packages]\npaths = [\"pkgs/js\"]\n",
+    "files": {
+      "pkgs/js/package.toml": "name = \"js\"\nversion = \"9\"\nsummary = \"x\"\n"
+    },
+    "steps": [
+      {
+        "run": "help \"js\"",
+        "expect": {
+          "ok": true,
+          "value~": "js.scripts",
+          "warnings.0~": "using the built-in one, skipping the path"
+        }
+      }
+    ]
+  },
+  {
+    "name": "script commands bind params as variables in their own scope",
+    "config": "[packages]\npaths = [\"pkgs/demo\", \"pkgs/narrow\"]\n",
+    "files": {
+      "pkgs/demo/package.toml": "name = \"demo\"\nversion = \"0.2.0\"\nsummary = \"demo package\"\ncaps = [\"read\", \"write\", \"exec\"]\ndetect = [\"demo.marker\"]\n\n[check]\nrecognize = [\"sh *\"]\n\n[check.patterns]\npassed = '(\\d+) ok'\nfailure = '(?m)^FAIL (\\w+)(?:: (.*))?$'\n\n[check.test]\ncmd = [\"sh\", \"-c\", \"echo '3 ok'; echo 'FAIL two: nope'; exit 1\"]\n\n[[command]]\nname = \"greet\"\nsummary = \"greet someone\"\nparams = [{ name = \"who\", type = \"str\", positional = true, required = true }, { name = \"loud\", type = \"bool\" }]\ninput = \"who\"\ncaps = [\"read\"]\nexamples = [\"demo.greet \\\"jo\\\" loud:true\"]\nrun = '''\nlet msg = \"hi $who\"\nif $loud { upper($msg) } else { $msg }\n'''\n\n[[command]]\nname = \"save\"\nsummary = \"write a file, then fail\"\ncaps = [\"write\"]\nrun = '''\nwrite \"made.txt\" \"x\"\nrm \"missing\"\n'''\n\n[[command]]\nname = \"loop\"\nsummary = \"calls itself\"\ncaps = [\"read\"]\nrun = \"demo.loop\"\n",
+      "pkgs/demo/brief.md": "demo: a test package.\n",
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"read-only package\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"shell\"\nsummary = \"tries to run a program\"\nrun = 'exec \"echo\" \"hi\"'\n"
+    },
+    "steps": [
+      {
+        "run": "let msg = \"mine\"\ndemo.greet \"jo\" loud:true\n$msg",
+        "expect": {
+          "ok": true,
+          "outputs.0.value": "HI JO",
+          "value": "mine"
+        }
+      },
+      {
+        "run": "\"pipe\" | demo.greet",
+        "expect": {
+          "value": "hi pipe"
+        }
+      },
+      {
+        "run": "demo.greet",
+        "expect": {
+          "error.code": "missing_argument"
+        }
+      },
+      {
+        "run": "help \"demo.greet\"",
+        "expect": {
+          "value.usage": "demo.greet who [loud:bool]"
+        }
+      }
+    ]
+  },
+  {
+    "name": "package commands can't use caps their package doesn't declare",
+    "config": "[packages]\npaths = [\"pkgs/demo\", \"pkgs/narrow\"]\n",
+    "files": {
+      "pkgs/demo/package.toml": "name = \"demo\"\nversion = \"0.2.0\"\nsummary = \"demo package\"\ncaps = [\"read\", \"write\", \"exec\"]\ndetect = [\"demo.marker\"]\n\n[check]\nrecognize = [\"sh *\"]\n\n[check.patterns]\npassed = '(\\d+) ok'\nfailure = '(?m)^FAIL (\\w+)(?:: (.*))?$'\n\n[check.test]\ncmd = [\"sh\", \"-c\", \"echo '3 ok'; echo 'FAIL two: nope'; exit 1\"]\n\n[[command]]\nname = \"greet\"\nsummary = \"greet someone\"\nparams = [{ name = \"who\", type = \"str\", positional = true, required = true }, { name = \"loud\", type = \"bool\" }]\ninput = \"who\"\ncaps = [\"read\"]\nexamples = [\"demo.greet \\\"jo\\\" loud:true\"]\nrun = '''\nlet msg = \"hi $who\"\nif $loud { upper($msg) } else { $msg }\n'''\n\n[[command]]\nname = \"save\"\nsummary = \"write a file, then fail\"\ncaps = [\"write\"]\nrun = '''\nwrite \"made.txt\" \"x\"\nrm \"missing\"\n'''\n\n[[command]]\nname = \"loop\"\nsummary = \"calls itself\"\ncaps = [\"read\"]\nrun = \"demo.loop\"\n",
+      "pkgs/demo/brief.md": "demo: a test package.\n",
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"read-only package\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"shell\"\nsummary = \"tries to run a program\"\nrun = 'exec \"echo\" \"hi\"'\n"
+    },
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "narrow.shell",
+        "expect": {
+          "error.code": "capability_denied",
+          "error.message": "package `narrow` doesn't declare the `exec` capability"
+        }
+      }
+    ]
+  },
+  {
+    "name": "a failing package command rolls back its file changes",
+    "config": "[packages]\npaths = [\"pkgs/demo\", \"pkgs/narrow\"]\n",
+    "files": {
+      "pkgs/demo/package.toml": "name = \"demo\"\nversion = \"0.2.0\"\nsummary = \"demo package\"\ncaps = [\"read\", \"write\", \"exec\"]\ndetect = [\"demo.marker\"]\n\n[check]\nrecognize = [\"sh *\"]\n\n[check.patterns]\npassed = '(\\d+) ok'\nfailure = '(?m)^FAIL (\\w+)(?:: (.*))?$'\n\n[check.test]\ncmd = [\"sh\", \"-c\", \"echo '3 ok'; echo 'FAIL two: nope'; exit 1\"]\n\n[[command]]\nname = \"greet\"\nsummary = \"greet someone\"\nparams = [{ name = \"who\", type = \"str\", positional = true, required = true }, { name = \"loud\", type = \"bool\" }]\ninput = \"who\"\ncaps = [\"read\"]\nexamples = [\"demo.greet \\\"jo\\\" loud:true\"]\nrun = '''\nlet msg = \"hi $who\"\nif $loud { upper($msg) } else { $msg }\n'''\n\n[[command]]\nname = \"save\"\nsummary = \"write a file, then fail\"\ncaps = [\"write\"]\nrun = '''\nwrite \"made.txt\" \"x\"\nrm \"missing\"\n'''\n\n[[command]]\nname = \"loop\"\nsummary = \"calls itself\"\ncaps = [\"read\"]\nrun = \"demo.loop\"\n",
+      "pkgs/demo/brief.md": "demo: a test package.\n",
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"read-only package\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"shell\"\nsummary = \"tries to run a program\"\nrun = 'exec \"echo\" \"hi\"'\n"
+    },
+    "steps": [
+      {
+        "run": "demo.save",
+        "expect": {
+          "ok": false,
+          "error.code": "capability_denied",
+          "error.rolled_back": true
+        },
+        "files": {
+          "made.txt": null
+        }
+      }
+    ]
+  },
+  {
+    "name": "package commands can't recurse forever",
+    "config": "[packages]\npaths = [\"pkgs/demo\", \"pkgs/narrow\"]\n",
+    "files": {
+      "pkgs/demo/package.toml": "name = \"demo\"\nversion = \"0.2.0\"\nsummary = \"demo package\"\ncaps = [\"read\", \"write\", \"exec\"]\ndetect = [\"demo.marker\"]\n\n[check]\nrecognize = [\"sh *\"]\n\n[check.patterns]\npassed = '(\\d+) ok'\nfailure = '(?m)^FAIL (\\w+)(?:: (.*))?$'\n\n[check.test]\ncmd = [\"sh\", \"-c\", \"echo '3 ok'; echo 'FAIL two: nope'; exit 1\"]\n\n[[command]]\nname = \"greet\"\nsummary = \"greet someone\"\nparams = [{ name = \"who\", type = \"str\", positional = true, required = true }, { name = \"loud\", type = \"bool\" }]\ninput = \"who\"\ncaps = [\"read\"]\nexamples = [\"demo.greet \\\"jo\\\" loud:true\"]\nrun = '''\nlet msg = \"hi $who\"\nif $loud { upper($msg) } else { $msg }\n'''\n\n[[command]]\nname = \"save\"\nsummary = \"write a file, then fail\"\ncaps = [\"write\"]\nrun = '''\nwrite \"made.txt\" \"x\"\nrm \"missing\"\n'''\n\n[[command]]\nname = \"loop\"\nsummary = \"calls itself\"\ncaps = [\"read\"]\nrun = \"demo.loop\"\n",
+      "pkgs/demo/brief.md": "demo: a test package.\n",
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"read-only package\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"shell\"\nsummary = \"tries to run a program\"\nrun = 'exec \"echo\" \"hi\"'\n"
+    },
+    "steps": [
+      {
+        "run": "demo.loop",
+        "expect": {
+          "ok": false,
+          "error.message": "package commands nested more than 16 deep"
+        }
+      }
+    ]
+  },
+  {
+    "name": "check uses a package's detected test task and failure patterns",
+    "config": "[packages]\npaths = [\"pkgs/demo\", \"pkgs/narrow\"]\n",
+    "files": {
+      "pkgs/demo/package.toml": "name = \"demo\"\nversion = \"0.2.0\"\nsummary = \"demo package\"\ncaps = [\"read\", \"write\", \"exec\"]\ndetect = [\"demo.marker\"]\n\n[check]\nrecognize = [\"sh *\"]\n\n[check.patterns]\npassed = '(\\d+) ok'\nfailure = '(?m)^FAIL (\\w+)(?:: (.*))?$'\n\n[check.test]\ncmd = [\"sh\", \"-c\", \"echo '3 ok'; echo 'FAIL two: nope'; exit 1\"]\n\n[[command]]\nname = \"greet\"\nsummary = \"greet someone\"\nparams = [{ name = \"who\", type = \"str\", positional = true, required = true }, { name = \"loud\", type = \"bool\" }]\ninput = \"who\"\ncaps = [\"read\"]\nexamples = [\"demo.greet \\\"jo\\\" loud:true\"]\nrun = '''\nlet msg = \"hi $who\"\nif $loud { upper($msg) } else { $msg }\n'''\n\n[[command]]\nname = \"save\"\nsummary = \"write a file, then fail\"\ncaps = [\"write\"]\nrun = '''\nwrite \"made.txt\" \"x\"\nrm \"missing\"\n'''\n\n[[command]]\nname = \"loop\"\nsummary = \"calls itself\"\ncaps = [\"read\"]\nrun = \"demo.loop\"\n",
+      "pkgs/demo/brief.md": "demo: a test package.\n",
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"read-only package\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"shell\"\nsummary = \"tries to run a program\"\nrun = 'exec \"echo\" \"hi\"'\n",
+      "demo.marker": ""
+    },
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "check",
+        "expect": {
+          "ok": false,
+          "error.code": "exec_failed",
+          "error.message~": "1 failed, 3 passed",
+          "error.value": "two: nope"
+        }
+      }
+    ]
+  },
+  {
+    "name": "check cmd: uses the parser of the package that recognizes it",
+    "config": "[packages]\npaths = [\"pkgs/demo\", \"pkgs/narrow\"]\n",
+    "files": {
+      "pkgs/demo/package.toml": "name = \"demo\"\nversion = \"0.2.0\"\nsummary = \"demo package\"\ncaps = [\"read\", \"write\", \"exec\"]\ndetect = [\"demo.marker\"]\n\n[check]\nrecognize = [\"sh *\"]\n\n[check.patterns]\npassed = '(\\d+) ok'\nfailure = '(?m)^FAIL (\\w+)(?:: (.*))?$'\n\n[check.test]\ncmd = [\"sh\", \"-c\", \"echo '3 ok'; echo 'FAIL two: nope'; exit 1\"]\n\n[[command]]\nname = \"greet\"\nsummary = \"greet someone\"\nparams = [{ name = \"who\", type = \"str\", positional = true, required = true }, { name = \"loud\", type = \"bool\" }]\ninput = \"who\"\ncaps = [\"read\"]\nexamples = [\"demo.greet \\\"jo\\\" loud:true\"]\nrun = '''\nlet msg = \"hi $who\"\nif $loud { upper($msg) } else { $msg }\n'''\n\n[[command]]\nname = \"save\"\nsummary = \"write a file, then fail\"\ncaps = [\"write\"]\nrun = '''\nwrite \"made.txt\" \"x\"\nrm \"missing\"\n'''\n\n[[command]]\nname = \"loop\"\nsummary = \"calls itself\"\ncaps = [\"read\"]\nrun = \"demo.loop\"\n",
+      "pkgs/demo/brief.md": "demo: a test package.\n",
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"read-only package\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"shell\"\nsummary = \"tries to run a program\"\nrun = 'exec \"echo\" \"hi\"'\n"
+    },
+    "allow": [
+      "exec"
+    ],
+    "steps": [
+      {
+        "run": "check cmd:\"sh -c 'echo FAIL one: boom'\"",
+        "expect": {
+          "ok": false,
+          "error.value": "one: boom"
+        }
+      }
+    ]
+  },
+  {
+    "name": "agentsh pkg add installs a package for every project",
+    "files": {
+      "pkgs/demo/package.toml": "name = \"demo\"\nversion = \"0.2.0\"\nsummary = \"demo package\"\ncaps = [\"read\", \"write\", \"exec\"]\ndetect = [\"demo.marker\"]\n\n[check]\nrecognize = [\"sh *\"]\n\n[check.patterns]\npassed = '(\\d+) ok'\nfailure = '(?m)^FAIL (\\w+)(?:: (.*))?$'\n\n[check.test]\ncmd = [\"sh\", \"-c\", \"echo '3 ok'; echo 'FAIL two: nope'; exit 1\"]\n\n[[command]]\nname = \"greet\"\nsummary = \"greet someone\"\nparams = [{ name = \"who\", type = \"str\", positional = true, required = true }, { name = \"loud\", type = \"bool\" }]\ninput = \"who\"\ncaps = [\"read\"]\nexamples = [\"demo.greet \\\"jo\\\" loud:true\"]\nrun = '''\nlet msg = \"hi $who\"\nif $loud { upper($msg) } else { $msg }\n'''\n\n[[command]]\nname = \"save\"\nsummary = \"write a file, then fail\"\ncaps = [\"write\"]\nrun = '''\nwrite \"made.txt\" \"x\"\nrm \"missing\"\n'''\n\n[[command]]\nname = \"loop\"\nsummary = \"calls itself\"\ncaps = [\"read\"]\nrun = \"demo.loop\"\n",
+      "pkgs/demo/brief.md": "demo: a test package.\n",
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"read-only package\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"shell\"\nsummary = \"tries to run a program\"\nrun = 'exec \"echo\" \"hi\"'\n"
+    },
+    "steps": [
+      {
+        "cli": [
+          "pkg",
+          "add",
+          "pkgs/narrow"
+        ],
+        "expect_text~": "installed narrow 1.0.0"
+      },
+      {
+        "cli": [
+          "pkg",
+          "add",
+          "pkgs/narrow"
+        ],
+        "expect_text": "<no stdout; stderr: agentsh pkg: `narrow` is already installed; pass --force to replace it>"
+      },
+      {
+        "run": "help \"narrow\"",
+        "expect": {
+          "value~": "narrow.shell"
+        }
+      },
+      {
+        "cli": [
+          "pkg",
+          "rm",
+          "narrow"
+        ],
+        "expect_text": "removed narrow"
+      },
+      {
+        "run": "narrow.shell",
+        "expect": {
+          "error.hint": "no package by that name; help \"packages\" lists them"
+        }
+      }
+    ]
+  },
+  {
+    "name": "pkg new scaffolds a package whose tests pass, and AGENTSH_PACKAGES loads it",
+    "steps": [
+      {
+        "cli": [
+          "pkg",
+          "new",
+          "acme"
+        ],
+        "expect_text~": "created ./acme/"
+      },
+      {
+        "cli": [
+          "pkg",
+          "test",
+          "acme"
+        ],
+        "expect_text~": "1 of 1 cases passed"
+      },
+      {
+        "cli": [
+          "pkg",
+          "new",
+          "acme"
+        ],
+        "expect_text~": "already exists"
+      },
+      {
+        "run": "acme.hello \"x\"",
+        "expect": {
+          "error.code": "unknown_command"
+        }
+      }
+    ]
+  },
+  {
+    "name": "AGENTSH_PACKAGES adds package folders",
+    "env": {
+      "AGENTSH_PACKAGES": "pkgs/narrow"
+    },
+    "files": {
+      "pkgs/narrow/package.toml": "name = \"narrow\"\nversion = \"1.0.0\"\nsummary = \"x\"\ncaps = [\"read\"]\n\n[[command]]\nname = \"hi\"\nsummary = \"hi\"\nrun = '\"hi\"'\n"
+    },
+    "steps": [
+      {
+        "run": "narrow.hi",
+        "expect": {
+          "value": "hi"
+        }
+      }
+    ]
+  }
+]
